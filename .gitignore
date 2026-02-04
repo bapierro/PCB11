@@ -1,1 +1,15 @@
-MEGRDMs_2D.mat
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# outputs
+outputs/
+features/
+*.npy
+
+# data
+data/imagenet_samples/
+
+# mac
+.DS_Store

@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "pcb11"
+version = "0.1.0"
+description = ""
+authors = ["Pierre Bathoum <pierre.bathoum@icloud.com>"]
+readme = "README.md"
+packages = [{ include = "pcb11", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+tensorflow = "2.15.0"
+torch = "2.0.1"
+torchvision = "0.15.2"
+thingsvision = "^2.7.3"
+numpy = "1.26.4"
+pillow = "^12.1.0"
+matplotlib = "^3.10.8"
+tensorflow-macos = {version = "2.15.0", markers = "platform_system == \"Darwin\""}
+
+[tool.poetry.scripts]
+pcb11-features = "pcb11.features_cli:main"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
