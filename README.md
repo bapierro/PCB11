@@ -17,7 +17,7 @@ See [docs/feature_extraction_explained.md](docs/feature_extraction_explained.md)
 ### Setup
 ```bash
 # Clone and enter the repository
-git clone <repo-url>
+git clone https://github.com/bapierro/PCB11.git
 cd PCB11
 
 # Create environment and install dependencies
