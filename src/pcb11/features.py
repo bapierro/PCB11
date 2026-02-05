@@ -20,7 +20,7 @@ from .data_utils import ensure_image_dir
 
 # Default layers for common models
 RESNET_LAYERS = ["layer1", "layer2", "layer3", "layer4"]
-ALEXNET_LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12"]
+ALEXNET_LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
 
 
 PoolMode = Literal["none", "gap", "flatten"]
