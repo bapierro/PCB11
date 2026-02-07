@@ -76,7 +76,7 @@ PCB11/
 │   ├── features_cli.py   # CLI for feature extraction
 │   └── data_utils.py     # Image directory utilities
 ├── scripts/
-│   ├── rsa_analysis.py   # RSA analysis
+│   ├── rsa.py
 │   └── train_behaviour_model.py
 ├── data/
 │   └── scenes/           # Input images
