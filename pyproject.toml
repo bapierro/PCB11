@@ -15,7 +15,9 @@ thingsvision = "^2.7.3"
 numpy = "1.26.4"
 pillow = "^12.1.0"
 matplotlib = "^3.10.8"
+scipy = "^1.15.0"
 tensorflow-macos = {version = "2.15.0", markers = "platform_system == \"Darwin\""}
+umap-learn = "^0.5.11"
 
 [tool.poetry.scripts]
 pcb11-features = "pcb11.features_cli:main"
