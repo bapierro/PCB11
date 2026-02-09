@@ -16,6 +16,7 @@ numpy = "1.26.4"
 pillow = "^12.1.0"
 matplotlib = "^3.10.8"
 tensorflow-macos = {version = "2.15.0", markers = "platform_system == \"Darwin\""}
+tensorflow-io-gcs-filesystem = "0.31.0"
 
 [tool.poetry.scripts]
 pcb11-features = "pcb11.features_cli:main"
