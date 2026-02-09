@@ -9,13 +9,21 @@ import argparse
 from pathlib import Path
 from typing import List, Optional
 
-from .features import FeatureConfig, extract_features, RESNET_LAYERS, ALEXNET_LAYERS
+from .features import (
+    ALEXNET_LAYERS,
+    ALL_LAYERS_TOKEN,
+    RESNET_LAYERS,
+    FeatureConfig,
+    extract_features,
+)
 
 
 def _parse_layers(layers_arg: Optional[str], model_name: str) -> Optional[List[str]]:
     """Parse layers argument or return None for defaults."""
     if not layers_arg:
         return None
+    if layers_arg.lower() == "all":
+        return [ALL_LAYERS_TOKEN]
     if layers_arg.lower() == "resnet":
         return RESNET_LAYERS
     if layers_arg.lower() == "alexnet":
@@ -76,7 +84,7 @@ Examples:
         "-l", "--layers",
         default=None,
         help=(
-            "Comma-separated layer names, or 'resnet'/'alexnet' for presets. "
+            "Comma-separated layer names, or 'all'/'resnet'/'alexnet' for presets. "
             "Default: auto-detect based on model."
         ),
     )

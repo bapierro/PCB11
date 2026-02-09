@@ -11,6 +11,7 @@ features/
 
 # data
 data/imagenet_samples/
+data/meg
 
 # mac
 .DS_Store

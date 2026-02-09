@@ -1,0 +1,14 @@
+Stereoscopic images from SYNS dataset (© October 2016 SYNS Dataset, https://syns.soton.ac.uk/)
+
+Resolution 35% of the original (about 2115 x 1408 pixels)
+Mean luminance set to 37.8 cd/m2
+
+Luminance modification was implemented using calibration data,
+so that the actual mean luminance of the projected images was the given 37.8 cd/m2.
+Also gamma correction was done, but since the projector was perfectly linear, it was actually unnecessary.
+
+Semantic categories: 
+1 - residence
+2 - nature
+3 - farm
+4 - car park

@@ -4,7 +4,7 @@ Feature extraction module for RSA analysis.
 Extracts feature vectors from CNN layers with optional Global Average Pooling (GAP).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
@@ -21,6 +21,7 @@ from .data_utils import ensure_image_dir
 # Default layers for common models
 RESNET_LAYERS = ["layer1", "layer2", "layer3", "layer4"]
 ALEXNET_LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+ALL_LAYERS_TOKEN = "all"
 
 
 PoolMode = Literal["none", "gap", "flatten"]
@@ -52,15 +53,27 @@ def _get_default_layers(model_name: str) -> List[str]:
     return []
 
 
+def _dedupe_preserve_order(items: List[str]) -> List[str]:
+    """Dedupe list while preserving original order."""
+    seen = set()
+    out: List[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
 def _apply_pooling(
     activations: np.ndarray, pool_mode: PoolMode
 ) -> np.ndarray:
     """Apply pooling to activations.
-    
+
     Args:
         activations: Shape [N, C, H, W] or [N, C] or [N, D]
         pool_mode: "none", "gap", or "flatten"
-    
+
     Returns:
         Pooled activations. For GAP: [N, C]. For flatten: [N, C*H*W].
     """
@@ -126,13 +139,18 @@ def extract_features(config: FeatureConfig) -> Dict[str, Path]:
         pretrained=config.pretrained,
     )
 
-    # Determine layers
+    # Determine layers (support explicit "all" to extract from every module)
     layers = config.layers or _get_default_layers(config.model_name)
+    if layers and len(layers) == 1 and layers[0].strip().lower() == ALL_LAYERS_TOKEN:
+        layers = list(extractor.get_module_names())
+    if layers:
+        layers = _dedupe_preserve_order(layers)
     if not layers:
         raise ValueError(
             f"No default layers for '{config.model_name}'. "
             "Please specify --layers explicitly."
         )
+    (output_dir / "module_names.txt").write_text("\n".join(layers) + "\n", encoding="utf-8")
 
     # Create dataset
     dataset = ImageDataset(
@@ -176,6 +194,6 @@ def extract_features(config: FeatureConfig) -> Dict[str, Path]:
         print(f"shape={features.shape} -> {out_file.name}")
 
     print("-" * 40)
-    print(f"✅ Saved {len(saved_files)} feature files to: {output_dir}")
+    print(f"Saved {len(saved_files)} feature files to: {output_dir}")
 
     return saved_files
