@@ -10,13 +10,27 @@ The repository now uses one canonical pipeline command that runs end-to-end:
 3. MEG RDM export and visualization
 4. RSA between ANN layer RDMs and MEG RDMs
 
-The canonical script is:
+## Pipeline Steps
+
+1. Export unified MEG bundle (one-time, or when source data changes):
+
+```bash
+poetry run python scripts/export_meg_bundle.py
+```
+
+2. Prepare precomputed MEG assets (one-time, or when bundle changes):
+
+```bash
+poetry run python scripts/prepare_meg_assets.py
+```
+
+3. Run the canonical ANN+MEG pipeline:
 
 ```bash
 poetry run python scripts/run_pipeline.py
 ```
 
-With explicit overrides:
+Example override:
 
 ```bash
 poetry run python scripts/run_pipeline.py \
@@ -48,42 +62,10 @@ No layer argument is exposed in the canonical CLI. Layer presets are hardcoded:
 - `resnet101`: `layer1,layer2,layer3,layer4`
 - `alexnet`: `features.2,features.5,features.9,classifier.2,classifier.5`
 
-## Feature Clustering CLI (UMAP + KMeans)
+## Optional: Feature Clustering
 
-You can cluster already extracted features with UMAP + KMeans and compare clusters to dataset ground truth labels:
-
-```bash
-poetry run python scripts/cluster_features.py \
-  --features-dir outputs/run_resnet101/features/resnet101
-```
-
-Cluster first in original feature space (then use UMAP only for visualization):
-
-```bash
-poetry run python scripts/cluster_features.py \
-  --features-dir outputs/run_resnet101/features/resnet101 \
-  --cluster-space feature
-```
-
-Ground truth labels are inferred from image folder names in `file_names.txt` (for SYNS-36: `1_Residence`, `2_Nature`, `3_Farm`, `4_CarPark`).
-
-Defaults:
-- UMAP `n_neighbors=10`, `min_dist=0.1`, `metric=euclidean`
-- KMeans `k = number of ground-truth classes`
-- KMeans clustering space: `umap` (use `--cluster-space feature` for cluster-first)
-- all layers from `module_names.txt`
-
-Main outputs (under `<RUN_ROOT>/clustering/<model>/` by default):
-- `run_manifest.json`
-- `layer_summary.csv` (ARI, NMI, aligned cluster accuracy, silhouette)
-- `labels/class_index.csv`, `labels/sample_index.csv`
-- per-layer folders with:
-  - `data/umap_embedding.npy`, `data/kmeans_labels.npy`, `data/kmeans_labels_aligned.npy`
-  - `data/metrics.json`, `data/confusion_matrix_aligned.csv`
-  - `plots/umap_ground_truth_vs_cluster.png`, `plots/confusion_matrix_aligned.png`
-
-Full clustering documentation (arguments, outputs, and interpretation):
-- `docs/feature_clustering.md`
+Feature clustering is a separate optional analysis, not part of the core pipeline run.
+For usage and interpretation, see `docs/feature_clustering.md`.
 
 Fixed defaults in the pipeline:
 - image directory: `data/scenes/syns_meg36`
@@ -167,25 +149,6 @@ For `--output-root <RUN_ROOT>`:
 ```
 
 ## Stimulus Order Policy
-
-Preferred (simplified) flow:
-1. Export one unified bundle once:
-
-```bash
-poetry run python scripts/export_meg_bundle.py
-```
-
-2. Prepare shared MEG artifacts once:
-
-```bash
-poetry run python scripts/prepare_meg_assets.py
-```
-
-3. Run the pipeline:
-
-```bash
-poetry run python scripts/run_pipeline.py
-```
 
 The pipeline auto-ensures MEG assets:
 - if `data/meg/meg_data.npz` is missing, it tries to build it from MATLAB source files
