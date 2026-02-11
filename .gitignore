@@ -11,6 +11,7 @@ features/
 
 # data
 data/imagenet_samples/
+data/meg/MEGRDMs_2D.mat
 
 # mac
 .DS_Store
