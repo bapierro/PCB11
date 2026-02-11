@@ -15,6 +15,7 @@ thingsvision = "^2.7.3"
 numpy = "1.26.4"
 pillow = "^12.1.0"
 matplotlib = "^3.10.8"
+scipy = "^1.15.0"
 tensorflow-macos = {version = "2.15.0", markers = "platform_system == \"Darwin\""}
 tensorflow-io-gcs-filesystem = "0.31.0"
 
