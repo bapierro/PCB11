@@ -32,14 +32,14 @@ Default mode (cluster on UMAP embedding):
 
 ```bash
 poetry run python scripts/cluster_features.py \
-  --features-dir outputs/clean_refactor_resnet101/features/resnet101
+  --features-dir outputs/run_resnet101/features/resnet101
 ```
 
 Cluster-first mode (cluster on original standardized feature vectors):
 
 ```bash
 poetry run python scripts/cluster_features.py \
-  --features-dir outputs/clean_refactor_resnet101/features/resnet101 \
+  --features-dir outputs/run_resnet101/features/resnet101 \
   --cluster-space feature
 ```
 
@@ -47,7 +47,7 @@ Run only selected layers:
 
 ```bash
 poetry run python scripts/cluster_features.py \
-  --features-dir outputs/clean_refactor_resnet101/features/resnet101 \
+  --features-dir outputs/run_resnet101/features/resnet101 \
   --layers layer1,layer2
 ```
 
@@ -55,7 +55,7 @@ Custom output folder and custom `k`:
 
 ```bash
 poetry run python scripts/cluster_features.py \
-  --features-dir outputs/clean_refactor_resnet101/features/resnet101 \
+  --features-dir outputs/run_resnet101/features/resnet101 \
   --output-dir outputs/cluster_runs/resnet101_k4 \
   --k 4
 ```

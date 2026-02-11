@@ -1,6 +1,6 @@
-# Current Pipeline Baseline
+# Pipeline Status and Limitations
 
-This document captures what the current clean pipeline does **today**, what each generated graph means, and which drawbacks/open questions remain before further changes.
+This document captures what the current canonical pipeline does today, what each generated graph means, and which limitations/open questions remain.
 
 ## Critical validity condition for ANN<->MEG RSA
 
@@ -8,54 +8,67 @@ ANN<->MEG RSA is only scientifically interpretable when ANN and MEG RDM rows/col
 
 - If the mapping from MEG index to image is unknown or wrong, RSA values can be arbitrary/misleading.
 - In that case, ANN-only and MEG-only RDM visualizations are still valid descriptively, but cross-modal RSA is not.
-- Therefore, `data/meg/stimulus_order.csv` (or equivalent verified order) is a required artifact for trustworthy RSA conclusions.
-- If fallback sorted-image order is used, treat RSA outputs as exploratory only.
+- Therefore, `stimulus_file_name` in `data/meg/meg_data.npz` must be verified for trustworthy RSA conclusions.
 
 ## Canonical entrypoint
+
+One-time MEG preparation:
+
+```bash
+poetry run python scripts/export_meg_bundle.py
+poetry run python scripts/prepare_meg_assets.py
+```
 
 Run:
 
 ```bash
-poetry run python scripts/run_meg_ann_rsa.py \
+poetry run python scripts/run_pipeline.py
+```
+
+Optional overrides:
+
+```bash
+poetry run python scripts/run_pipeline.py \
   --model <resnet18|resnet50|resnet101|alexnet> \
-  --meg-rdm data/meg/MEGRDMs_2D.mat \
   --output-root outputs/<run_name>
 ```
 
+Defaults:
+- `--model resnet101`
+- `--output-root outputs/run_<model>`
+
 Code path:
-- `scripts/run_meg_ann_rsa.py`
-- `src/pcb11/pipeline_clean.py`
+- `scripts/run_pipeline.py`
+- `src/pcb11/pipeline.py`
 
 ## What the pipeline currently does
 
 ### 1) Inputs and fixed defaults
 
 - Fixed image set: `data/scenes/syns_meg36`
-- MEG input variable expected in `.mat`: `MEGRDMs_2D`
-- Time vector source: `data/meg/time.mat` variable `time` (fallback: `np.arange(T)-200`)
+- MEG input: `data/meg/meg_data.npz` unified bundle (auto-built if missing and MATLAB sources exist)
+- Shared precomputed MEG artifacts: `data/meg/precomputed_rdm` (auto-built/reused)
+- Time vector source: `time_ms` in the bundle
 - Feature source: `thingsvision` extractor with `torchvision` backbones
 - Pooling: `gap`
 - RDM method for ANN: `correlation` via `thingsvision.core.rsa.compute_rdm`
+- RSA correlation method: `spearman` via `thingsvision.core.rsa.correlate_rdms`
 - Layer presets (hardcoded):
   - `resnet18|resnet50|resnet101`: `layer1, layer2, layer3, layer4`
   - `alexnet`: `features.2, features.5, features.9, classifier.2, classifier.5`
 
 ### 2) Stimulus order resolution and alignment
 
-- Preferred order file: `data/meg/stimulus_order.csv`
-- Supported order formats:
-  - `file_name`
-  - `SYNSscene,SYNSView`
-- If missing, pipeline falls back to sorted image-file discovery under `data/scenes/syns_meg36` and records a warning.
+- Order source: `stimulus_file_name` from `data/meg/meg_data.npz`
 - ANN features are reordered to the resolved stimulus order using `file_names.txt`.
 - Pipeline hard-fails if MEG image dimension and resolved order length differ.
 
 ### 3) Stage-by-stage execution
 
 - Stage 1: Extract features or reuse existing complete features for selected model preset.
-- Stage 2: Load MEG RDM tensor, keep subject-resolved RDMs when available, export group-average and per-subject MEG RDM files/plots.
+- Stage 2: Ensure/refresh MEG assets, then copy them into the current run output.
 - Stage 3: Compute ANN layer RDMs, save matrices, render ANN RDM plots in two scale modes, and render ANN RDM animation.
-- Stage 4: Compute layer-by-time RSA per subject (Spearman on vectorized upper triangles), then write group-mean summaries and per-subject outputs.
+- Stage 4: Compute layer-by-time RSA per subject using `thingsvision.core.rsa.correlate_rdms` (`spearman`), then write group-mean summaries and per-subject outputs.
 - Stage 5: Write `run_manifest.json` with resolved configuration, warnings, and paths.
 
 ## What the graphs mean
@@ -93,10 +106,23 @@ Code path:
   - Matrix of layer (rows) vs time (columns), values are Spearman correlations between ANN RDM and MEG RDM.
   - Vertical dashed line marks image onset (`t=0`).
 - `RSA/plots/rsa_layerwise_overlay.png`
-  - Time courses for all layers overlaid.
-  - Last layer highlighted in black.
+  - Time courses for all layers overlaid with equal visual treatment.
+  - Legend includes all layers.
 - `RSA/plots/per_subject/<subject>/...`
   - Subject-specific RSA heatmap/overlay for each participant.
+
+## Current RSA timing observation
+
+From the latest `resnet101` run (`outputs/run_resnet101`), there is no clear early-to-late latency ordering across layers.
+
+- Group peak times from `RSA/data/layer_summary.csv`:
+  - `layer1`: `105 ms`
+  - `layer2`: `102 ms`
+  - `layer3`: `102 ms`
+  - `layer4`: `-97 ms` (global-maximum artifact outside post-stimulus window)
+- In a restricted `0..300 ms` window, `layer4` peaks later (around `254 ms`) but with weaker magnitude than layers 1-3.
+- Interpretation: this run shows a shared response window across layers rather than a clean temporal hierarchy.
+- Practical takeaway: use windowed latency metrics and uncertainty estimates, not only global maxima over the full time range.
 
 ## What works already
 
@@ -110,19 +136,17 @@ Code path:
 
 ## Current drawbacks and open questions
 
-1. Stimulus order is a hard validity condition for RSA, and confidence is currently limited without a verified `data/meg/stimulus_order.csv`.
-2. Current runs in this repo used fallback sorted-image order (as recorded in run manifests), so alignment should be treated as provisional until validated.
-3. MEG input is already precomputed RDMs; this pipeline does not recompute MEG RDMs from raw sensor trials, so dissimilarity provenance depends on upstream preprocessing.
-4. Subject-level RSA is now exported, but inferential statistics are still missing (e.g., permutation tests, cluster correction, confidence intervals).
-5. Group-level outputs currently summarize with means/SEMs; they are still descriptive unless explicit hypothesis testing is added.
-6. Layer coverage is intentionally sparse (stage-level presets), which is efficient but may miss informative intermediate computations.
-7. Group boundary lines in RDM plots assume contiguous category blocks from resolved order; if order is interleaved, boundaries can be visually misleading.
-8. Current pipeline does not include baseline model controls (untrained/random/task controls) or noise-ceiling estimates.
-9. `data/meg/MEGRDMs_2D_avg.mat` currently does not expose `MEGRDMs_2D` under that exact variable name, so canonical loading fails for that file without conversion.
+1. Stimulus order is a hard validity condition for RSA; verify the bundle order against the experimental protocol.
+2. MEG input is already precomputed RDMs; this pipeline does not recompute MEG RDMs from raw sensor trials, so dissimilarity provenance depends on upstream preprocessing.
+3. Subject-level RSA is now exported, but inferential statistics are still missing (e.g., permutation tests, cluster correction, confidence intervals).
+4. Group-level outputs currently summarize with means/SEMs; they are still descriptive unless explicit hypothesis testing is added.
+5. Layer coverage is intentionally sparse (stage-level presets), which is efficient but may miss informative intermediate computations.
+6. Group boundary lines in RDM plots assume contiguous category blocks from resolved order; if order is interleaved, boundaries can be visually misleading.
+7. Current pipeline does not include baseline model controls (untrained/random/task controls) or noise-ceiling estimates.
 
 ## Suggested baseline checks before next changes
 
-1. Add and verify authoritative `data/meg/stimulus_order.csv` against the MEG generation pipeline.
+1. Keep bundle metadata and stimulus order verified against the MEG generation pipeline.
 2. Decide whether next iteration should keep subject-level MEG RDMs through RSA and statistics.
 3. Decide layer sampling policy per architecture (stage checkpoints vs denser taps).
 4. Define required inferential outputs (permutation/cluster tests, latency tests, uncertainty bands).

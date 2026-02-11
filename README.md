@@ -13,10 +13,15 @@ The repository now uses one canonical pipeline command that runs end-to-end:
 The canonical script is:
 
 ```bash
-poetry run python scripts/run_meg_ann_rsa.py \
+poetry run python scripts/run_pipeline.py
+```
+
+With explicit overrides:
+
+```bash
+poetry run python scripts/run_pipeline.py \
   --model resnet50 \
-  --meg-rdm data/meg/MEGRDMs_2D.mat \
-  --output-root outputs/clean_run_resnet50
+  --output-root outputs/run_resnet50
 ```
 
 ## Requirements
@@ -33,10 +38,9 @@ poetry install
 
 ## Canonical CLI
 
-`scripts/run_meg_ann_rsa.py` accepts exactly:
-- `--model` (`resnet50`, `resnet18`, `resnet101`, `alexnet`)
-- `--meg-rdm` (path to `.mat` with variable `MEGRDMs_2D`)
-- `--output-root` (run output folder)
+`scripts/run_pipeline.py` accepts:
+- `--model` (`resnet50`, `resnet18`, `resnet101`, `alexnet`; default: `resnet101`)
+- `--output-root` (run output folder; default: `outputs/run_<model>`)
 
 No layer argument is exposed in the canonical CLI. Layer presets are hardcoded:
 - `resnet50`: `layer1,layer2,layer3,layer4`
@@ -50,14 +54,14 @@ You can cluster already extracted features with UMAP + KMeans and compare cluste
 
 ```bash
 poetry run python scripts/cluster_features.py \
-  --features-dir outputs/clean_refactor_resnet101/features/resnet101
+  --features-dir outputs/run_resnet101/features/resnet101
 ```
 
 Cluster first in original feature space (then use UMAP only for visualization):
 
 ```bash
 poetry run python scripts/cluster_features.py \
-  --features-dir outputs/clean_refactor_resnet101/features/resnet101 \
+  --features-dir outputs/run_resnet101/features/resnet101 \
   --cluster-space feature
 ```
 
@@ -87,6 +91,7 @@ Fixed defaults in the pipeline:
 - pooling: `gap`
 - weights: pretrained
 - RDM method: correlation (`thingsvision.core.rsa.compute_rdm`)
+- RSA correlation: Spearman (`thingsvision.core.rsa.correlate_rdms`)
 - RSA strategy: subject-wise first, then group-mean summary
 
 ## Output Structure
@@ -163,34 +168,46 @@ For `--output-root <RUN_ROOT>`:
 
 ## Stimulus Order Policy
 
-The pipeline resolves stimulus ordering with this priority:
-1. `data/meg/stimulus_order.csv` (if present)
-2. fallback to sorted image file order from `data/scenes/syns_meg36`
+Preferred (simplified) flow:
+1. Export one unified bundle once:
 
-If fallback is used, the run prints a warning and stores it in `run_manifest.json`.
+```bash
+poetry run python scripts/export_meg_bundle.py
+```
+
+2. Prepare shared MEG artifacts once:
+
+```bash
+poetry run python scripts/prepare_meg_assets.py
+```
+
+3. Run the pipeline:
+
+```bash
+poetry run python scripts/run_pipeline.py
+```
+
+The pipeline auto-ensures MEG assets:
+- if `data/meg/meg_data.npz` is missing, it tries to build it from MATLAB source files
+- if precomputed MEG artifacts are missing/outdated, it rebuilds them under `data/meg/precomputed_rdm`
+
+If required MATLAB source files are missing, it fails with a clear error.
 The exact order used is always written to:
 - `<RUN_ROOT>/RDM/MEG/data/stimulus_order_used.csv`
 
 Critical validity note:
 - ANN<->MEG RSA is only interpretable if ANN and MEG RDM indices refer to the same stimuli in the same order.
-- If `stimulus_order_source` in `run_manifest.json` is `fallback_sorted_images`, treat RSA results as exploratory and not as confirmatory evidence.
+- `stimulus_order_source` in `run_manifest.json` should point to `meg_data.npz::stimulus_file_name`.
 
-## Legacy Script Wrappers
-
-These scripts are kept as deprecated wrappers and now forward to the canonical pipeline with canonical args:
-- `scripts/rsa.py`
-- `scripts/compute_rdms.py`
-- `scripts/plot_meg_rdms.py`
-
-Use `scripts/run_meg_ann_rsa.py` for all new runs.
+Use `scripts/run_pipeline.py` for all analysis runs.
 
 ## Notes
 
 For a non-technical intuition of feature extraction, see:
 - `docs/feature_extraction_explained.md`
 
-For a baseline snapshot of the current pipeline behavior, graph interpretation, and known limitations/open questions, see:
-- `docs/current_pipeline_baseline.md`
+For current pipeline behavior, graph interpretation, and known limitations/open questions, see:
+- `docs/pipeline_status_and_limitations.md`
 
 For detailed clustering usage and interpretation, see:
 - `docs/feature_clustering.md`
