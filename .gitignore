@@ -1,17 +1,14 @@
-# python
+# Python artifacts
 __pycache__/
 *.pyc
+
+# Virtual environments
 .venv/
 venv/
+.env
 
-# outputs
+# Project specific data (Too big for Git)
+data/
 outputs/
-features/
 *.npy
-
-# data
-data/imagenet_samples/
-data/meg/MEGRDMs_2D.mat
-
-# mac
-.DS_Store
+*.mat
