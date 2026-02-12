@@ -13,6 +13,8 @@ from .features import (
     ALEXNET_LAYERS,
     ALL_LAYERS_TOKEN,
     RESNET_LAYERS,
+    VIT_B_16_LAYERS,
+    VIT_B_32_LAYERS,
     FeatureConfig,
     extract_features,
 )
@@ -28,6 +30,10 @@ def _parse_layers(layers_arg: Optional[str], model_name: str) -> Optional[List[s
         return RESNET_LAYERS
     if layers_arg.lower() == "alexnet":
         return ALEXNET_LAYERS
+    if layers_arg.lower() == "vit":
+        if model_name.lower() == "vit_b_32":
+            return VIT_B_32_LAYERS
+        return VIT_B_16_LAYERS
     return [layer.strip() for layer in layers_arg.split(",") if layer.strip()]
 
 
@@ -43,7 +49,7 @@ def _get_device() -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Extract CNN features for RSA analysis.",
+        description="Extract ANN features for RSA analysis.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -77,23 +83,29 @@ Examples:
     parser.add_argument(
         "-m", "--model",
         default="resnet50",
-        help="Model name (default: resnet50). Supports: resnet18/34/50/101, alexnet, vgg16, etc.",
+        help=(
+            "Model name (default: resnet50). Supports common torchvision backbones "
+            "(e.g., resnet18/34/50/101, alexnet, vgg16, vit_b_16, vit_b_32)."
+        ),
     )
 
     parser.add_argument(
         "-l", "--layers",
         default=None,
         help=(
-            "Comma-separated layer names, or 'all'/'resnet'/'alexnet' for presets. "
+            "Comma-separated layer names, or 'all'/'resnet'/'alexnet'/'vit' for presets. "
             "Default: auto-detect based on model."
         ),
     )
 
     parser.add_argument(
         "-p", "--pool",
-        choices=["none", "gap", "flatten"],
+        choices=["none", "gap", "flatten", "cls", "token_mean"],
         default="gap",
-        help="Pooling mode: gap (default), flatten, or none",
+        help=(
+            "Pooling mode: gap (default), flatten, none, cls, or token_mean. "
+            "For ViT block outputs, cls or token_mean are typically preferred."
+        ),
     )
 
     parser.add_argument(

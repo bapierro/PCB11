@@ -1,7 +1,7 @@
 """
 Feature extraction module for RSA analysis.
 
-Extracts feature vectors from CNN layers with optional Global Average Pooling (GAP).
+Extracts feature vectors from ANN modules with configurable pooling.
 """
 
 from dataclasses import dataclass
@@ -21,10 +21,12 @@ from .data_utils import ensure_image_dir
 # Default layers for common models
 RESNET_LAYERS = ["layer1", "layer2", "layer3", "layer4"]
 ALEXNET_LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+VIT_B_16_LAYERS = [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)]
+VIT_B_32_LAYERS = [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)]
 ALL_LAYERS_TOKEN = "all"
 
 
-PoolMode = Literal["none", "gap", "flatten"]
+PoolMode = Literal["none", "gap", "flatten", "cls", "token_mean"]
 
 
 @dataclass
@@ -49,6 +51,10 @@ def _get_default_layers(model_name: str) -> List[str]:
         return RESNET_LAYERS
     if "alexnet" in model_lower:
         return ALEXNET_LAYERS
+    if model_lower == "vit_b_16":
+        return VIT_B_16_LAYERS
+    if model_lower == "vit_b_32":
+        return VIT_B_32_LAYERS
     # Fallback: user must specify
     return []
 
@@ -72,10 +78,11 @@ def _apply_pooling(
 
     Args:
         activations: Shape [N, C, H, W] or [N, C] or [N, D]
-        pool_mode: "none", "gap", or "flatten"
+        pool_mode: "none", "gap", "flatten", "cls", or "token_mean"
 
     Returns:
-        Pooled activations. For GAP: [N, C]. For flatten: [N, C*H*W].
+        Pooled activations. For GAP: [N, C]. For flatten: [N, ...]. For
+        CLS/token_mean on ViT-style activations: [N, D].
     """
     if pool_mode == "none":
         return activations
@@ -103,6 +110,12 @@ def _apply_pooling(
         if pool_mode == "flatten":
             n = activations.shape[0]
             return activations.reshape(n, -1)
+        if pool_mode == "token_mean":
+            return activations.mean(axis=1)
+        if pool_mode == "cls":
+            if activations.shape[1] == 0:
+                raise ValueError("Cannot apply cls pooling to empty token dimension.")
+            return activations[:, 0, :]
 
     return activations
 
@@ -114,7 +127,7 @@ def _sanitize_name(name: str) -> str:
 
 def extract_features(config: FeatureConfig) -> Dict[str, Path]:
     """
-    Extract features from specified layers of a CNN.
+    Extract features from specified ANN modules.
 
     Args:
         config: Feature extraction configuration.

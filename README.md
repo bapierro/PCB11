@@ -70,7 +70,7 @@ poetry run python scripts/prepare_meg_assets.py
 ## Pipeline CLI
 
 `scripts/run_pipeline.py` accepts:
-- `--model` (`resnet50`, `resnet18`, `resnet101`, `alexnet`; default: `resnet101`)
+- `--model` (`resnet50`, `resnet18`, `resnet101`, `alexnet`, `vit_b_16`, `vit_b_32`; default: `resnet101`)
 - `--output-root` (run output folder; default: `outputs/run_<model>`)
 
 No layer argument is exposed in the pipeline CLI. Layer presets are hardcoded:
@@ -78,11 +78,13 @@ No layer argument is exposed in the pipeline CLI. Layer presets are hardcoded:
 - `resnet18`: `layer1,layer2,layer3,layer4`
 - `resnet101`: `layer1,layer2,layer3,layer4`
 - `alexnet`: `features.2,features.5,features.7,features.9,features.12,classifier.2,classifier.5,classifier.6`
+- `vit_b_16`: `encoder.layers.encoder_layer_0` ... `encoder.layers.encoder_layer_11`
+- `vit_b_32`: `encoder.layers.encoder_layer_0` ... `encoder.layers.encoder_layer_11`
 
 Fixed defaults in the pipeline:
 - image directory: `data/scenes/syns_meg36`
 - feature extraction source: `torchvision`
-- pooling: `gap`
+- pooling: `gap` for CNN presets, `cls` for ViT presets
 - weights: pretrained
 - RDM method: correlation (`thingsvision.core.rsa.compute_rdm`)
 - RSA correlation: Spearman (`thingsvision.core.rsa.correlate_rdms`)

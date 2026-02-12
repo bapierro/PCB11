@@ -41,6 +41,8 @@ MODEL_LAYER_PRESETS: dict[str, list[str]] = {
     "resnet18": ["layer1", "layer2", "layer3", "layer4"],
     "resnet101": ["layer1", "layer2", "layer3", "layer4"],
     "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
+    "vit_b_16": [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)],
+    "vit_b_32": [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)],
 }
 
 DEFAULT_RDM_METHOD = "correlation"
@@ -67,6 +69,15 @@ def _default_output_root_for_model(model: str) -> Path:
     """Build the default output folder for a selected model."""
 
     return Path(DEFAULT_OUTPUT_ROOT_TEMPLATE.format(model=model.lower()))
+
+
+def _resolve_pool_mode(model: str) -> str:
+    """Resolve pooling strategy for the selected architecture preset."""
+
+    if model.startswith("vit_"):
+        # For ViT blocks, keep the CLS token vector at each block depth.
+        return "cls"
+    return "gap"
 
 
 def _subject_label(index: int) -> str:
@@ -292,6 +303,7 @@ def _extract_features_if_needed(
     config: PipelineConfig,
     features_dir: Path,
     layers: Sequence[str],
+    pool_mode: str,
     warnings: list[str],
 ) -> tuple[bool, str]:
     """Reuse complete feature files or run extraction for the selected model preset."""
@@ -315,7 +327,7 @@ def _extract_features_if_needed(
         device=device,
         pretrained=True,
         layers=list(layers),
-        pool_mode="gap",
+        pool_mode=pool_mode,
         batch_size=32,
     )
     extract_features(cfg)
@@ -342,6 +354,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         allowed = ", ".join(sorted(MODEL_LAYER_PRESETS))
         raise SystemExit(f"Unsupported model '{config.model}'. Supported models: {allowed}")
     layers = MODEL_LAYER_PRESETS[model]
+    pool_mode = _resolve_pool_mode(model)
 
     if not config.images_dir.exists():
         raise SystemExit(f"Fixed image directory not found: {config.images_dir}")
@@ -368,8 +381,8 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         raise SystemExit("Resolved stimulus order is empty.")
 
     _log("Stage 1/5: Feature extraction or reuse...")
-    features_reused, device = _extract_features_if_needed(config, dirs["features_model"], layers, warnings)
-    _log(f"Stage 1/5 complete. feature_reused={features_reused}, device={device}")
+    features_reused, device = _extract_features_if_needed(config, dirs["features_model"], layers, pool_mode, warnings)
+    _log(f"Stage 1/5 complete. feature_reused={features_reused}, device={device}, pool_mode={pool_mode}")
     _log("Loading extracted feature image order...")
     model_file_order = _load_feature_file_names(dirs["features_model"], config.images_dir)
 
@@ -535,7 +548,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         "resolved": {
             "model_layers": layers,
             "rdm_method": DEFAULT_RDM_METHOD,
-            "pool_mode": "gap",
+            "pool_mode": pool_mode,
             "source": "torchvision",
             "pretrained": True,
             "device": device,

@@ -149,6 +149,16 @@ def save_rsa_outputs(
     fig_l, ax_l = plt.subplots(figsize=(13.5, 6.5))
     cmap = plt.get_cmap("viridis")
     denom = max(1, len(layer_labels) - 1)
+    verbose_labels = [f"{idx + 1:02d}: {layer_labels[idx]}" for idx in range(len(layer_labels))]
+    max_verbose_len = max((len(label) for label in verbose_labels), default=0)
+    use_compact_legend = len(layer_labels) > 8 or max_verbose_len > 28
+    if use_compact_legend:
+        legend_labels = [f"L{idx + 1:02d}" for idx in range(len(layer_labels))]
+        legend_title = "Layers (see layer_index.csv)"
+    else:
+        legend_labels = verbose_labels
+        legend_title = "Layers"
+
     for idx, corr in enumerate(corr_matrix):
         ax_l.plot(
             time_points,
@@ -156,23 +166,36 @@ def save_rsa_outputs(
             color=cmap(idx / denom),
             alpha=0.9,
             linewidth=1.4,
-            label=f"{idx + 1:02d}: {layer_labels[idx]}",
+            label=legend_labels[idx],
         )
     ax_l.axvline(0.0, color="black", linestyle="--", linewidth=1.0)
     ax_l.set_ylim(corr_vmin, corr_vmax)
     ax_l.set_xlabel("Time (ms)")
     ax_l.set_ylabel("Spearman correlation")
     ax_l.set_title(f"Layerwise RSA Time Overlay ({model_name})")
-    legend_columns = 1 if len(layer_labels) <= 8 else 2
-    ax_l.legend(
-        loc="upper left",
-        bbox_to_anchor=(1.02, 1.0),
-        borderaxespad=0.0,
-        fontsize=8,
-        ncol=legend_columns,
-        title="Layers",
-        title_fontsize=9,
-    )
-    fig_l.tight_layout(rect=(0.0, 0.0, 0.74, 1.0))
+    if use_compact_legend:
+        legend_columns = min(6, max(2, int(np.ceil(len(layer_labels) / 2))))
+        ax_l.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.18),
+            borderaxespad=0.0,
+            fontsize=8,
+            ncol=legend_columns,
+            title=legend_title,
+            title_fontsize=9,
+        )
+        fig_l.tight_layout(rect=(0.0, 0.14, 1.0, 1.0))
+    else:
+        legend_columns = 1 if len(layer_labels) <= 8 else 2
+        ax_l.legend(
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            borderaxespad=0.0,
+            fontsize=8,
+            ncol=legend_columns,
+            title=legend_title,
+            title_fontsize=9,
+        )
+        fig_l.tight_layout(rect=(0.0, 0.0, 0.74, 1.0))
     fig_l.savefig(plots_dir / "rsa_layerwise_overlay.png", dpi=160)
     plt.close(fig_l)

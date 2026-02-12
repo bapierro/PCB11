@@ -50,12 +50,13 @@ Code path:
 - Shared precomputed MEG artifacts: `data/meg/precomputed_rdm` (auto-built/reused)
 - Time vector source: `time_ms` in the bundle
 - Feature source: `thingsvision` extractor with `torchvision` backbones
-- Pooling: `gap`
+- Pooling: `gap` for CNN presets, `cls` for ViT presets
 - RDM method for ANN: `correlation` via `thingsvision.core.rsa.compute_rdm`
 - RSA correlation method: `spearman` via `thingsvision.core.rsa.correlate_rdms`
 - Layer presets (hardcoded):
   - `resnet18|resnet50|resnet101`: `layer1, layer2, layer3, layer4`
   - `alexnet`: `features.2, features.5, features.7, features.9, features.12, classifier.2, classifier.5, classifier.6`
+  - `vit_b_16|vit_b_32`: `encoder.layers.encoder_layer_0 ... encoder.layers.encoder_layer_11` (block depth as model axis)
 
 ### 2) Stimulus order resolution and alignment
 
