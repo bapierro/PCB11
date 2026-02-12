@@ -30,30 +30,43 @@ def main():
     
     # Helper to get the first mode (handles ties by picking the first one)
     def compute_mode(x):
-        # x.mode() returns a Series of the most frequent values. 
-        # Taking .iloc[0] selects the first one if there are ties.
         return x.mode().iloc[0] if not x.mode().empty else None
 
-    print("Computing consensus (mode) labels...")
-    # Group by scene and view, aggregating label and ID by mode
-    consensus_df = df.groupby(['SYNSscene', 'SYNSView'])[['categorySelected', 'categoryLabelSelected']].agg(compute_mode).reset_index()
+    print("Computing consensus (mode) labels per task...")
     
-    # Clean up the label strings (remove newlines and extra spaces)
-    # The raw file has labels like "Tunnel/ \n Navigable\n Routes"
-    if 'categoryLabelSelected' in consensus_df.columns:
-        consensus_df['categoryLabelSelected'] = (
-            consensus_df['categoryLabelSelected']
+    # Group by task, scene, and view to separate dimensions
+    grouped = df.groupby(['task', 'SYNSscene', 'SYNSView'])[['categorySelected', 'categoryLabelSelected']]
+    consensus_long = grouped.agg(compute_mode).reset_index()
+    
+    # Clean strings
+    if 'categoryLabelSelected' in consensus_long.columns:
+        consensus_long['categoryLabelSelected'] = (
+            consensus_long['categoryLabelSelected']
             .astype(str)
-            .str.replace(r'[\r\n]+', ' ', regex=True) # Replace newlines with space
-            .str.replace(r'\s+', ' ', regex=True)     # Collapse multiple spaces
+            .str.replace(r'[\r\n]+', ' ', regex=True)
+            .str.replace(r'\s+', ' ', regex=True)
             .str.strip()
         )
 
-    print(f"Consensus data: {len(consensus_df)} unique scene/view pairs")
+    # Pivot to wide format: One row per image (Scene/View), columns for each task
+    # This creates a table where each image has columns for Structure, Semantic, Appearance, etc.
+    pivot_df = consensus_long.pivot(index=['SYNSscene', 'SYNSView'], columns='task', values=['categorySelected', 'categoryLabelSelected'])
     
-    # Save the result
+    # Flatten column names from MultiIndex (Measure, Task) -> Task_Measure
+    # e.g. ('categorySelected', 'Structure') -> 'Structure_Category'
+    new_columns = []
+    for val_type, task_name in pivot_df.columns:
+        suffix = "Category" if val_type == "categorySelected" else "Label"
+        new_columns.append(f"{task_name}_{suffix}")
+    
+    pivot_df.columns = new_columns
+    pivot_df = pivot_df.reset_index()
+    
+    print(f"Consensus data: {len(pivot_df)} unique scene/view pairs")
+    print(f"Columns generated: {list(pivot_df.columns)}")
+
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    consensus_df.to_csv(OUTPUT_FILE, index=False)
+    pivot_df.to_csv(OUTPUT_FILE, index=False)
     print(f"Saved consensus dataframe to: {OUTPUT_FILE}")
 
 if __name__ == "__main__":
