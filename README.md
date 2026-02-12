@@ -10,33 +10,6 @@ The repository now uses one main pipeline command that runs end-to-end:
 3. MEG RDM export and visualization
 4. RSA between ANN layer RDMs and MEG RDMs
 
-## Pipeline Steps
-
-Run the main ANN+MEG pipeline:
-
-```bash
-poetry run python scripts/run_pipeline.py
-```
-
-The pipeline auto-handles MEG assets:
-- if `data/meg/meg_data.npz` is missing, it builds it from MATLAB source files
-- if `data/meg/precomputed_rdm` is missing/outdated, it rebuilds it
-
-Example override:
-
-```bash
-poetry run python scripts/run_pipeline.py \
-  --model resnet50 \
-  --output-root outputs/run_resnet50
-```
-
-Optional manual precompute commands (usually not needed):
-
-```bash
-poetry run python scripts/export_meg_bundle.py
-poetry run python scripts/prepare_meg_assets.py
-```
-
 ## MEG Data Download
 
 Published MEG data are available on OSF:
@@ -65,6 +38,35 @@ poetry env use python3.10
 poetry install
 ```
 
+## Pipeline Steps
+
+Run the main ANN+MEG pipeline:
+
+```bash
+poetry run python scripts/run_pipeline.py
+```
+
+The pipeline auto-handles MEG assets:
+- if `data/meg/meg_data.npz` is missing, it builds it from MATLAB source files
+- if `data/meg/precomputed_rdm` is missing/outdated, it rebuilds it
+
+Example override:
+
+```bash
+poetry run python scripts/run_pipeline.py \
+  --model resnet50 \
+  --output-root outputs/run_resnet50
+```
+
+Optional manual precompute commands (usually not needed):
+
+```bash
+poetry run python scripts/export_meg_bundle.py
+poetry run python scripts/prepare_meg_assets.py
+```
+
+
+
 ## Pipeline CLI
 
 `scripts/run_pipeline.py` accepts:
@@ -84,19 +86,6 @@ Fixed defaults in the pipeline:
 - weights: pretrained
 - RDM method: correlation (`thingsvision.core.rsa.compute_rdm`)
 - RSA correlation: Spearman (`thingsvision.core.rsa.correlate_rdms`)
-- RSA strategy: subject-wise first, then Fisher-z group mean
-
-### Why Fisher-z Group Mean
-
-Correlations are not additive on the raw `r` scale. Averaging subject correlations directly with a plain mean can bias group estimates, especially when values are farther from zero.
-
-To reduce that bias, we aggregate subject RSA values in three steps:
-
-1. Clip each subject correlation to `(-1, 1)` to avoid infinities.
-2. Transform correlations with Fisher-z: `z = arctanh(r)`.
-3. Compute group mean in `z` space, then back-transform: `r_group = tanh(mean(z))`.
-
-This keeps per-subject RSA as the primary unit and makes the group summary more statistically stable than a direct mean on raw correlations.
 
 ## Output Structure
 
