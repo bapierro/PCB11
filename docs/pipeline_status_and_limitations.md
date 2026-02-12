@@ -1,6 +1,6 @@
 # Pipeline Status and Limitations
 
-This document captures what the current canonical pipeline does today, what each generated graph means, and which limitations/open questions remain.
+This document captures what the current main pipeline does today, what each generated graph means, and which limitations/open questions remain.
 
 ## Critical validity condition for ANN<->MEG RSA
 
@@ -10,7 +10,7 @@ ANN<->MEG RSA is only scientifically interpretable when ANN and MEG RDM rows/col
 - In that case, ANN-only and MEG-only RDM visualizations are still valid descriptively, but cross-modal RSA is not.
 - Therefore, `stimulus_file_name` in `data/meg/meg_data.npz` must be verified for trustworthy RSA conclusions.
 
-## Canonical entrypoint
+## Main entrypoint
 
 One-time MEG preparation:
 
@@ -138,7 +138,7 @@ From the latest `resnet101` run (`outputs/run_resnet101`), there is no clear ear
 
 ## What works already
 
-- Single canonical CLI for end-to-end run.
+- Single main CLI for end-to-end run.
 - Structured output tree (`features/`, `RDM/`, `RSA/`, `run_manifest.json`).
 - Deterministic layer presets per model.
 - Feature reuse logic to skip unnecessary re-extraction.

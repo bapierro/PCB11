@@ -1,4 +1,4 @@
-"""Canonical orchestration pipeline for ANN features, RDMs, and RSA."""
+"""Main orchestration pipeline for ANN features, RDMs, and RSA."""
 
 from __future__ import annotations
 
@@ -560,8 +560,8 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
     return manifest
 
 
-def build_canonical_parser(description: str | None = None) -> argparse.ArgumentParser:
-    """Build the canonical CLI argument parser with project defaults."""
+def build_main_parser(description: str | None = None) -> argparse.ArgumentParser:
+    """Build the main CLI argument parser with project defaults."""
 
     parser = argparse.ArgumentParser(
         description=description or "Run MEG+ANN feature/RDM/RSA pipeline.",
@@ -582,13 +582,13 @@ def build_canonical_parser(description: str | None = None) -> argparse.ArgumentP
     return parser
 
 
-def canonical_cli_main(
+def main_cli(
     argv: Sequence[str] | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
     """CLI wrapper that parses args and launches ``run_pipeline``."""
 
-    parser = build_canonical_parser(description=description)
+    parser = build_main_parser(description=description)
     args = parser.parse_args(argv)
     resolved_model = str(args.model).lower()
     resolved_output_root = (

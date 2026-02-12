@@ -4,7 +4,7 @@ Topic #11: Can behaviour-trained ANNs reveal the brain's temporal hierarchy in s
 
 ## Overview
 
-The repository now uses one canonical pipeline command that runs end-to-end:
+The repository now uses one main pipeline command that runs end-to-end:
 1. ANN feature extraction (fixed image set, fixed layer preset by model)
 2. ANN RDM computation and visualization
 3. MEG RDM export and visualization
@@ -12,23 +12,15 @@ The repository now uses one canonical pipeline command that runs end-to-end:
 
 ## Pipeline Steps
 
-1. Export unified MEG bundle (one-time, or when source data changes):
-
-```bash
-poetry run python scripts/export_meg_bundle.py
-```
-
-2. Prepare precomputed MEG assets (one-time, or when bundle changes):
-
-```bash
-poetry run python scripts/prepare_meg_assets.py
-```
-
-3. Run the canonical ANN+MEG pipeline:
+Run the main ANN+MEG pipeline:
 
 ```bash
 poetry run python scripts/run_pipeline.py
 ```
+
+The pipeline auto-handles MEG assets:
+- if `data/meg/meg_data.npz` is missing, it builds it from MATLAB source files
+- if `data/meg/precomputed_rdm` is missing/outdated, it rebuilds it
 
 Example override:
 
@@ -37,6 +29,29 @@ poetry run python scripts/run_pipeline.py \
   --model resnet50 \
   --output-root outputs/run_resnet50
 ```
+
+Optional manual precompute commands (usually not needed):
+
+```bash
+poetry run python scripts/export_meg_bundle.py
+poetry run python scripts/prepare_meg_assets.py
+```
+
+## MEG Data Download
+
+Published MEG data are available on OSF:
+- `https://osf.io/jp26k/overview`
+
+Download these files and place them under `data/meg/`:
+- from `MEG RDMs`: `MEGRDMs_2D.mat` -> `data/meg/MEGRDMs_2D.mat`
+- from `MEG RDMs`: `time.mat` -> `data/meg/time.mat`
+- from `Stimulus images (small icons for visualization)`: `imagestruct_final.mat` -> `data/meg/imagestruct_final.mat`
+
+Notes:
+- `MEGRDMs_2D.mat` has shape `36 x 36 x 1201 x 20` (images x images x time x subjects)
+- `time.mat` contains the time vector (length `1201`), with baseline before `0 ms`
+- `imagestruct_final.mat` provides low-resolution visualization icons plus `imF`/`imI` indices to original SYNS images
+- optional reference/model RDMs (for example `semanticRDM_sq.mat`) are in OSF folder `Model RDMs`
 
 ## Requirements
 
@@ -50,22 +65,17 @@ poetry env use python3.10
 poetry install
 ```
 
-## Canonical CLI
+## Pipeline CLI
 
 `scripts/run_pipeline.py` accepts:
 - `--model` (`resnet50`, `resnet18`, `resnet101`, `alexnet`; default: `resnet101`)
 - `--output-root` (run output folder; default: `outputs/run_<model>`)
 
-No layer argument is exposed in the canonical CLI. Layer presets are hardcoded:
+No layer argument is exposed in the pipeline CLI. Layer presets are hardcoded:
 - `resnet50`: `layer1,layer2,layer3,layer4`
 - `resnet18`: `layer1,layer2,layer3,layer4`
 - `resnet101`: `layer1,layer2,layer3,layer4`
 - `alexnet`: `features.2,features.5,features.7,features.9,features.12,classifier.2,classifier.5,classifier.6`
-
-## Optional: Feature Clustering
-
-Feature clustering is a separate optional analysis, not part of the core pipeline run.
-For usage and interpretation, see `docs/feature_clustering.md`.
 
 Fixed defaults in the pipeline:
 - image directory: `data/scenes/syns_meg36`
@@ -183,6 +193,3 @@ For a non-technical intuition of feature extraction, see:
 
 For current pipeline behavior, graph interpretation, and known limitations/open questions, see:
 - `docs/pipeline_status_and_limitations.md`
-
-For detailed clustering usage and interpretation, see:
-- `docs/feature_clustering.md`

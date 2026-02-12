@@ -9,13 +9,13 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from pcb11.pipeline import canonical_cli_main
+from pcb11.pipeline import main_cli
 
 
 def main() -> None:
-    canonical_cli_main(
+    main_cli(
         description=(
-            "Canonical pipeline: ANN feature extraction -> ANN/MEG RDM visualizations -> RSA. "
+            "Main pipeline: ANN feature extraction -> ANN/MEG RDM visualizations -> RSA. "
             "Layer presets are hardcoded per model."
         )
     )
