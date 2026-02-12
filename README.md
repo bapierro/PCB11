@@ -60,7 +60,7 @@ No layer argument is exposed in the canonical CLI. Layer presets are hardcoded:
 - `resnet50`: `layer1,layer2,layer3,layer4`
 - `resnet18`: `layer1,layer2,layer3,layer4`
 - `resnet101`: `layer1,layer2,layer3,layer4`
-- `alexnet`: `features.2,features.5,features.9,classifier.2,classifier.5`
+- `alexnet`: `features.2,features.5,features.7,features.9,features.12,classifier.2,classifier.5,classifier.6`
 
 ## Optional: Feature Clustering
 
@@ -74,7 +74,19 @@ Fixed defaults in the pipeline:
 - weights: pretrained
 - RDM method: correlation (`thingsvision.core.rsa.compute_rdm`)
 - RSA correlation: Spearman (`thingsvision.core.rsa.correlate_rdms`)
-- RSA strategy: subject-wise first, then group-mean summary
+- RSA strategy: subject-wise first, then Fisher-z group mean
+
+### Why Fisher-z Group Mean
+
+Correlations are not additive on the raw `r` scale. Averaging subject correlations directly with a plain mean can bias group estimates, especially when values are farther from zero.
+
+To reduce that bias, we aggregate subject RSA values in three steps:
+
+1. Clip each subject correlation to `(-1, 1)` to avoid infinities.
+2. Transform correlations with Fisher-z: `z = arctanh(r)`.
+3. Compute group mean in `z` space, then back-transform: `r_group = tanh(mean(z))`.
+
+This keeps per-subject RSA as the primary unit and makes the group summary more statistically stable than a direct mean on raw correlations.
 
 ## Output Structure
 

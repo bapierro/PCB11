@@ -40,7 +40,7 @@ MODEL_LAYER_PRESETS: dict[str, list[str]] = {
     "resnet50": ["layer1", "layer2", "layer3", "layer4"],
     "resnet18": ["layer1", "layer2", "layer3", "layer4"],
     "resnet101": ["layer1", "layer2", "layer3", "layer4"],
-    "alexnet": ["features.2", "features.5", "features.9", "classifier.2", "classifier.5"],
+    "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
 }
 
 DEFAULT_RDM_METHOD = "correlation"
@@ -471,11 +471,18 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
     _log("Stage 4/5: Computing RSA timecourses and plots...")
     corr_by_subject = compute_rsa_timecourses_per_subject(layer_rdms, meg_subjects)
     n_subjects = corr_by_subject.shape[0]
-    corr_matrix = np.nanmean(corr_by_subject, axis=0)
+    # Fisher-z aggregate subject correlations for a less biased group estimate.
+    with np.errstate(invalid="ignore"):
+        corr_clipped = np.clip(corr_by_subject, -0.999999, 0.999999)
+        z_by_subject = np.arctanh(corr_clipped)
+        z_group_mean = np.nanmean(z_by_subject, axis=0)
+        corr_matrix = np.tanh(z_group_mean)
+
     with np.errstate(invalid="ignore", divide="ignore"):
-        valid_count = np.sum(np.isfinite(corr_by_subject), axis=0)
+        valid_count = np.sum(np.isfinite(z_by_subject), axis=0)
         denom = np.sqrt(np.where(valid_count > 1, valid_count, np.nan))
-        corr_sem = np.nanstd(corr_by_subject, axis=0, ddof=1) / denom
+        z_sem = np.nanstd(z_by_subject, axis=0, ddof=1) / denom
+        corr_sem = (1.0 - np.square(corr_matrix)) * z_sem
 
     np.save(dirs["rsa_data"] / "rsa_layer_time_subjects.npy", corr_by_subject)
     np.save(dirs["rsa_data"] / "rsa_layer_time_group_mean.npy", corr_matrix)
@@ -506,14 +513,14 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
             model_name=f"{model} {subject_label}",
         )
 
-    _log("Writing group-mean RSA outputs...")
+    _log("Writing Fisher-aggregated group RSA outputs...")
     save_rsa_outputs(
         layer_labels=layer_labels,
         corr_matrix=corr_matrix,
         time_points=time_points,
         data_dir=dirs["rsa_data"],
         plots_dir=dirs["rsa_plots"],
-        model_name=f"{model} (group mean, n={n_subjects})",
+        model_name=f"{model} (Fisher-z group mean, n={n_subjects})",
     )
     _log("Stage 4/5 complete.")
 
@@ -539,7 +546,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
             "stimulus_order_source": stimulus_source,
             "feature_reused": features_reused,
             "meg_subject_count": int(meg_subjects.shape[3]),
-            "rsa_strategy": "subject_wise_then_group_mean",
+            "rsa_strategy": "subject_wise_then_fisher_z_group_mean",
             "meg_rdm_avg_shape": list(meg_avg.shape),
             "meg_rdm_subject_shape": list(meg_subjects.shape),
         },

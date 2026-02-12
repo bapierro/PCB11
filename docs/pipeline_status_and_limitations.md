@@ -55,7 +55,7 @@ Code path:
 - RSA correlation method: `spearman` via `thingsvision.core.rsa.correlate_rdms`
 - Layer presets (hardcoded):
   - `resnet18|resnet50|resnet101`: `layer1, layer2, layer3, layer4`
-  - `alexnet`: `features.2, features.5, features.9, classifier.2, classifier.5`
+  - `alexnet`: `features.2, features.5, features.7, features.9, features.12, classifier.2, classifier.5, classifier.6`
 
 ### 2) Stimulus order resolution and alignment
 
@@ -68,8 +68,20 @@ Code path:
 - Stage 1: Extract features or reuse existing complete features for selected model preset.
 - Stage 2: Ensure/refresh MEG assets, then copy them into the current run output.
 - Stage 3: Compute ANN layer RDMs, save matrices, render ANN RDM plots in two scale modes, and render ANN RDM animation.
-- Stage 4: Compute layer-by-time RSA per subject using `thingsvision.core.rsa.correlate_rdms` (`spearman`), then write group-mean summaries and per-subject outputs.
+- Stage 4: Compute layer-by-time RSA per subject using `thingsvision.core.rsa.correlate_rdms` (`spearman`), aggregate group curves with Fisher-z mean (`atanh` -> average -> `tanh`), and write group and per-subject outputs.
 - Stage 5: Write `run_manifest.json` with resolved configuration, warnings, and paths.
+
+### Why Fisher-z for group RSA
+
+Raw correlation values are bounded (`-1..1`) and not additive, so directly averaging subject correlations on the `r` scale can be biased.
+
+The current group aggregation is:
+- subject-level RSA first (one curve per subject),
+- Fisher transform each subject value (`z = arctanh(r)`),
+- average in `z` space,
+- back-transform to correlation scale (`r_group = tanh(mean(z))`).
+
+This preserves subject-level inference and yields a more stable group summary than direct arithmetic mean on raw correlations.
 
 ## What the graphs mean
 
