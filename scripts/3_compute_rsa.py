@@ -9,9 +9,9 @@ from scipy.stats import rankdata
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # --- 1. PICK YOUR MODEL HERE ---
-MODEL_NAME = "alexnet"  # Change to "alexnet" when you want to run the other model
+MODEL_NAME = "alexnet"  # Change to "resnet50" when you want to run the other model
 
-# 2. Define layers for each model (identical to previous scripts)
+# 2. Define layers for each model
 MODELS = {
     "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
     "resnet50": ["layer1", "layer2", "layer3", "layer4"]
@@ -62,31 +62,57 @@ def compute_correlation(layer_rdms, meg_rdms):
     return out
 
 def main():
-    print(f"\n=== Computing RSA for {MODEL_NAME.upper()} ===")
+    print(f"\n=== Computing RSA for {MODEL_NAME.upper()} (Subject-Level) ===")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     print("Loading MEG brain data...")
     mat = loadmat(MEG_FILE, squeeze_me=True)
     meg_data = np.asarray(mat["MEGRDMs_2D"], dtype=np.float64)
     
-    # If MEG data has 4 dimensions (e.g., subjects), average across them
-    if meg_data.ndim == 4:
-        meg_data = meg_data.mean(axis=3)
-
     # Load model RDMs computed in the previous step
     layer_rdms = []
     for layer in LAYERS:
         safe_layer = layer.replace(".", "_").replace("/", "_")
         layer_rdms.append(np.load(RDM_DIR / f"{safe_layer}_rdm.npy"))
 
-    # Compute RSA (Representational Similarity Analysis)
-    rsa_results = compute_correlation(layer_rdms, meg_data)
-
-    # Save results for each layer
-    for idx, layer in enumerate(LAYERS):
-        safe_layer = layer.replace(".", "_").replace("/", "_")
-        np.save(OUTPUT_DIR / f"{safe_layer}_rsa_spearman.npy", rsa_results[idx])
-        print(f" - Saved RSA data for {safe_layer}")
+    # --- NEW LOGIC: Loop through subjects instead of averaging early ---
+    if meg_data.ndim == 4:
+        n_subjects = meg_data.shape[3]
+        n_time = meg_data.shape[2]
+        print(f"Found {n_subjects} subjects. Computing individual RSAs...")
+        
+        # Prepare matrix to hold everyone's results: Shape (Layers, Time, Subjects)
+        all_subjects_rsa = np.zeros((len(LAYERS), n_time, n_subjects))
+        
+        for s in range(n_subjects):
+            print(f" - Processing Subject {s+1}/{n_subjects}...", end="\r")
+            subject_meg = meg_data[:, :, :, s]
+            all_subjects_rsa[:, :, s] = compute_correlation(layer_rdms, subject_meg)
+            
+        print("\nFinished computing individual RSAs.")
+        
+        # Now we average the RSA correlations across subjects
+        mean_rsa = all_subjects_rsa.mean(axis=2)
+        
+        # Save results for each layer
+        for idx, layer in enumerate(LAYERS):
+            safe_layer = layer.replace(".", "_").replace("/", "_")
+            
+            # Save the average line (for the main plot)
+            np.save(OUTPUT_DIR / f"{safe_layer}_rsa_spearman_mean.npy", mean_rsa[idx])
+            
+            # Save the individual subject data (vital for calculating standard error / shaded bars!)
+            np.save(OUTPUT_DIR / f"{safe_layer}_rsa_spearman_subjects.npy", all_subjects_rsa[idx])
+            
+            print(f" - Saved Mean and Subject data for {safe_layer}")
+            
+    else:
+        print("Data is already 3D. Computing single RSA...")
+        rsa_results = compute_correlation(layer_rdms, meg_data)
+        for idx, layer in enumerate(LAYERS):
+            safe_layer = layer.replace(".", "_").replace("/", "_")
+            np.save(OUTPUT_DIR / f"{safe_layer}_rsa_spearman.npy", rsa_results[idx])
+            print(f" - Saved RSA data for {safe_layer}")
 
 if __name__ == "__main__":
     main()
