@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from thingsvision import get_extractor
+from thingsvision import get_extractor, get_extractor_from_model
 from thingsvision.utils.data import DataLoader, ImageDataset
 
 from .data_utils import ensure_image_dir
@@ -23,6 +23,10 @@ RESNET_LAYERS = ["layer1", "layer2", "layer3", "layer4"]
 ALEXNET_LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
 VIT_B_16_LAYERS = [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)]
 VIT_B_32_LAYERS = [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)]
+DINOV2_VITS14_LAYERS = [f"blocks.{idx}" for idx in range(12)]
+DINOV2_VITB14_LAYERS = [f"blocks.{idx}" for idx in range(12)]
+DINOV2_VITL14_LAYERS = [f"blocks.{idx}" for idx in range(24)]
+DINOV2_VITG14_LAYERS = [f"blocks.{idx}" for idx in range(40)]
 ALL_LAYERS_TOKEN = "all"
 
 
@@ -55,6 +59,14 @@ def _get_default_layers(model_name: str) -> List[str]:
         return VIT_B_16_LAYERS
     if model_lower == "vit_b_32":
         return VIT_B_32_LAYERS
+    if model_lower == "dinov2_vits14":
+        return DINOV2_VITS14_LAYERS
+    if model_lower == "dinov2_vitb14":
+        return DINOV2_VITB14_LAYERS
+    if model_lower == "dinov2_vitl14":
+        return DINOV2_VITL14_LAYERS
+    if model_lower == "dinov2_vitg14":
+        return DINOV2_VITG14_LAYERS
     # Fallback: user must specify
     return []
 
@@ -145,12 +157,21 @@ def extract_features(config: FeatureConfig) -> Dict[str, Path]:
         file_names = [config.image_path.name]
 
     # Get extractor
-    extractor = get_extractor(
-        model_name=config.model_name,
-        source=config.source,
-        device=config.device,
-        pretrained=config.pretrained,
-    )
+    if config.model_name.startswith("dinov2_"):
+        print(f"Loading {config.model_name} from facebookresearch/dinov2 via torch.hub...")
+        model = torch.hub.load("facebookresearch/dinov2", config.model_name)
+        extractor = get_extractor_from_model(
+            model=model,
+            device=config.device,
+            backend="pt",
+        )
+    else:
+        extractor = get_extractor(
+            model_name=config.model_name,
+            source=config.source,
+            device=config.device,
+            pretrained=config.pretrained,
+        )
 
     # Determine layers (support explicit "all" to extract from every module)
     layers = config.layers or _get_default_layers(config.model_name)

@@ -43,6 +43,10 @@ MODEL_LAYER_PRESETS: dict[str, list[str]] = {
     "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
     "vit_b_16": [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)],
     "vit_b_32": [f"encoder.layers.encoder_layer_{idx}" for idx in range(12)],
+    "dinov2_vits14": [f"blocks.{idx}" for idx in range(12)],
+    "dinov2_vitb14": [f"blocks.{idx}" for idx in range(12)],
+    "dinov2_vitl14": [f"blocks.{idx}" for idx in range(24)],
+    "dinov2_vitg14": [f"blocks.{idx}" for idx in range(40)],
 }
 
 DEFAULT_RDM_METHOD = "correlation"
@@ -74,8 +78,8 @@ def _default_output_root_for_model(model: str) -> Path:
 def _resolve_pool_mode(model: str) -> str:
     """Resolve pooling strategy for the selected architecture preset."""
 
-    if model.startswith("vit_"):
-        # For ViT blocks, keep the CLS token vector at each block depth.
+    if model.startswith("vit_") or model.startswith("dinov2_"):
+        # For ViT/DINO blocks, keep the CLS token vector at each block depth.
         return "cls"
     return "gap"
 
