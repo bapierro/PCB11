@@ -20,25 +20,37 @@ MODELS = {
 # Select layers based on the chosen model
 LAYERS = MODELS[MODEL_NAME]
 
-# Define paths: location of computed RDMs, output for RSA results, and MEG data source
+# Define paths: location of computed RDMs, output for RSA results, MEG data source and 
+# three behavioral model RDMs
 RDM_DIR = PROJECT_ROOT / "outputs/clean_baseline/rdms" / MODEL_NAME
 OUTPUT_DIR = PROJECT_ROOT / "outputs/clean_baseline/rsa" / MODEL_NAME
 MEG_FILE = PROJECT_ROOT / "data/meg/MEGRDMs_2D.mat"
+SEMANTIC_FILE = PROJECT_ROOT / "data/meg/semanticRDM_sq.mat"
+STRUCTURE_FILE = PROJECT_ROOT / "data/meg/structureRDM_sq.mat"
+VISUAL_FILE = PROJECT_ROOT / "data/meg/visualRDM_sq.mat"
 
 def compute_correlation(layer_rdms, meg_rdms):
     """
-    Computes Spearman correlation between model RDMs and MEG RDMs over time.
+    Computes Spearman correlation between model RDMs and MEG RDMs over time (or the three 
+    behavioral model RDMs).
     Spearman correlation is Pearson correlation of the ranked data.
     """
     n_images = meg_rdms.shape[0]
-    n_time = meg_rdms.shape[2]
+    try:
+        n_time = meg_rdms.shape[2]
+    except IndexError:
+        n_time = 1  # If there's no time dimension, assume single time point
+        
     # Get upper triangular indices to extract unique pairwise dissimilarities
     tri = np.triu_indices(n_images, k=1)
     
     # Pre-process MEG data: flatten upper triangle for each time point
-    meg_vectors = np.empty((n_time, tri[0].size), dtype=np.float64)
-    for t in range(n_time):
-        meg_vectors[t] = meg_rdms[:, :, t][tri]
+    if n_time != 1:
+        meg_vectors = np.empty((n_time, tri[0].size), dtype=np.float64)
+        for t in range(n_time):
+            meg_vectors[t] = meg_rdms[:, :, t][tri]
+    else:
+        meg_vectors = meg_rdms[tri].reshape(1, -1)  
         
     # Rank transform MEG data for Spearman correlation
     meg_ranked = np.array([rankdata(row) for row in meg_vectors])
@@ -113,6 +125,18 @@ def main():
             safe_layer = layer.replace(".", "_").replace("/", "_")
             np.save(OUTPUT_DIR / f"{safe_layer}_rsa_spearman.npy", rsa_results[idx])
             print(f" - Saved RSA data for {safe_layer}")
+
+    # compute RSA for the three behavioral models as well
+    print("\nComputing RSA for behavioral models...")
+    for model_name, model_file in [("semantic", SEMANTIC_FILE), ("structure", STRUCTURE_FILE), ("visual", VISUAL_FILE)]:
+        model_mat = loadmat(model_file, squeeze_me=True, struct_as_record=False)
+        rdm_struct = model_mat['RDM']
+        model_rdm = np.asarray(rdm_struct.RDM, dtype=np.float64)
+        
+        # Compute RSA for this behavioral model
+        rsa_results = compute_correlation(layer_rdms, model_rdm)
+        np.save(OUTPUT_DIR / f"{model_name}_rsa_spearman.npy", rsa_results)
+        print(f" - Saved RSA data for {model_name} model.")
 
 if __name__ == "__main__":
     main()

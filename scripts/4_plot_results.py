@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_NAME = "alexnet"
 RSA_DIR = PROJECT_ROOT / "outputs/clean_baseline/rsa" / MODEL_NAME
 SAVE_PATH = PROJECT_ROOT / "outputs/clean_baseline/alexnet_final_dashboard.png"
+SAVE_PATH_BEHAVIOR = PROJECT_ROOT / "outputs/clean_baseline/alexnet_behavioral_comparison.png"
 
 LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", 
           "classifier.2", "classifier.5", "classifier.6"]
@@ -21,6 +22,9 @@ def main():
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
     colors = plt.cm.viridis(np.linspace(0, 1, len(LAYERS)))
     
+    # Set up a figure for behavioral model comparisons
+    fig2, axes2 = plt.subplots(3, 1, figsize=(8, 10))
+
     # Store data for the bottom plot
     final_peaks = []
     final_errors = []
@@ -106,6 +110,25 @@ def main():
     plt.tight_layout()
     plt.savefig(SAVE_PATH)
     print(f"Dashboard saved to: {SAVE_PATH}")
+
+    # 3. Plot Behavioral Model Comparisons
+    behavioral_models = ["semantic", "structure", "visual"]
+    for i, model in enumerate(behavioral_models):
+        model_file = RSA_DIR / f"{model}_rsa_spearman.npy"
+        if model_file.exists():
+            model_data = np.load(model_file).flatten()
+            print(model_data)
+            axes2[i].bar(np.arange(len(model_data)), model_data, color=colors[:len(model_data)])
+            axes2[i].set_title(f"RSA with {model.capitalize()} Model", fontsize=12)
+            axes2[i].set_xticks(np.arange(len(LAYERS)))
+            axes2[i].set_xticklabels(LAYERS, rotation=25)
+            axes2[i].set_ylabel("Spearman Correlation")
+        else:
+            print(f"Missing behavioral model data for: {model}")
+
+    plt.tight_layout()
+    plt.savefig(SAVE_PATH_BEHAVIOR)
+    print(f"Dashboard saved to: {SAVE_PATH_BEHAVIOR}")
     plt.show()
 
 if __name__ == "__main__":
