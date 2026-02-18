@@ -25,7 +25,7 @@ def smooth_data(data, window=10):
 
 def main():
     # Set up a two-panel figure
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+    fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
     colors = plt.cm.viridis(np.linspace(0, 1, len(LAYERS)))
     
     # Set up a figure for behavioral model comparisons
@@ -110,11 +110,11 @@ def main():
     ax2.set_xticks(layer_indices)
     ax2.set_xticklabels(LAYERS, rotation=45)
     ax2.set_ylabel("Time of Peak Match (ms)")
-    ax2.set_xlabel("AlexNet Layers")
+    ax2.set_xlabel(f"{MODEL_NAME.upper()} Layers")
     ax2.grid(axis='y', linestyle=':', alpha=0.6)
 
     plt.tight_layout()
-    plt.savefig(SAVE_PATH)
+    fig1.savefig(SAVE_PATH)
     print(f"Dashboard saved to: {SAVE_PATH}")
 
     # 3. Plot Behavioral Model Comparisons
@@ -123,7 +123,6 @@ def main():
         model_file = RSA_DIR / f"{model}_rsa_spearman.npy"
         if model_file.exists():
             model_data = np.load(model_file).flatten()
-            print(model_data)
             axes2[i].bar(np.arange(len(model_data)), model_data, color=colors[:len(model_data)])
             axes2[i].set_title(f"RSA with {model.capitalize()} Model", fontsize=12)
             axes2[i].set_xticks(np.arange(len(LAYERS)))
@@ -133,7 +132,7 @@ def main():
             print(f"Missing behavioral model data for: {model}")
 
     plt.tight_layout()
-    plt.savefig(SAVE_PATH_BEHAVIOR)
+    fig2.savefig(SAVE_PATH_BEHAVIOR)
     print(f"Dashboard saved to: {SAVE_PATH_BEHAVIOR}")
     plt.show()
 
