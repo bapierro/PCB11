@@ -4,13 +4,19 @@ from pathlib import Path
 
 # Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_NAME = "alexnet"
+MODEL_NAME = "resnet50"
 RSA_DIR = PROJECT_ROOT / "outputs/clean_baseline/rsa" / MODEL_NAME
-SAVE_PATH = PROJECT_ROOT / "outputs/clean_baseline/alexnet_final_dashboard.png"
-SAVE_PATH_BEHAVIOR = PROJECT_ROOT / "outputs/clean_baseline/alexnet_behavioral_comparison.png"
+SAVE_PATH = PROJECT_ROOT / f"outputs/clean_baseline/{MODEL_NAME}_final_dashboard.png"
+SAVE_PATH_BEHAVIOR = PROJECT_ROOT / f"outputs/clean_baseline/{MODEL_NAME}_behavioral_comparison.png"
 
-LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", 
-          "classifier.2", "classifier.5", "classifier.6"]
+# Define layers for each model
+MODELS = {
+    "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
+    "resnet50": ["layer1", "layer2", "layer3", "layer4"]
+}
+
+# Select layers based on the chosen model
+LAYERS = MODELS[MODEL_NAME]
 
 def smooth_data(data, window=10):
     """Smooths jittery MEG data to find the true peak."""
