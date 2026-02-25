@@ -32,8 +32,7 @@ from .meg_assets import (
     prepare_shared_meg_assets,
     sync_shared_meg_assets,
 )
-from .rsa_outputs import compute_rsa_timecourses_per_subject, save_rsa_outputs
-
+from .rsa_outputs import compute_rsa_timecourses_per_subject, save_peak_latency_plot, save_rsa_outputs
 IMAGES_DIR = Path("data/scenes/syns_meg36")
 
 MODEL_LAYER_PRESETS: dict[str, list[str]] = {
@@ -538,6 +537,14 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         data_dir=dirs["rsa_data"],
         plots_dir=dirs["rsa_plots"],
         model_name=f"{model} (Fisher-z group mean, n={n_subjects})",
+    )
+    _log("Writing Peak Latency output per layer...")
+    save_peak_latency_plot(
+        corr_by_subject=corr_by_subject,
+        layer_labels=layer_labels,
+        time_points=time_points,
+        plots_dir=dirs["rsa_plots"],
+        model_name=f"{model} (n={n_subjects})",
     )
     _log("Stage 4/5 complete.")
 

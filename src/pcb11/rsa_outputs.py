@@ -199,3 +199,79 @@ def save_rsa_outputs(
         fig_l.tight_layout(rect=(0.0, 0.0, 0.74, 1.0))
     fig_l.savefig(plots_dir / "rsa_layerwise_overlay.png", dpi=160)
     plt.close(fig_l)
+
+
+def smooth_data(data: np.ndarray, window: int = 20) -> np.ndarray:
+    """Smooths jittery MEG data to find the true peak."""
+    smoothing = np.convolve(data, np.ones(window) / window, mode="same")
+    return smoothing
+
+
+def save_peak_latency_plot(
+    corr_by_subject: np.ndarray,
+    layer_labels: Sequence[str],
+    time_points: np.ndarray,
+    plots_dir: Path,
+    model_name: str,
+    search_start_ms: float = 50.0,
+    search_end_ms: float = 450.0,
+    n_bootstraps: int = 1000,
+) -> None:
+    """Computes bootstrapped peak latencies and saves a plot."""
+
+    n_subj, n_layers, _ = corr_by_subject.shape
+
+    start_idx = int(np.argmin(np.abs(time_points - search_start_ms)))
+    end_idx = int(np.argmin(np.abs(time_points - search_end_ms)))
+
+    final_peaks: list[float] = []
+    final_errors: list[float] = []
+
+    for layer_idx in range(n_layers):
+        layer_data = corr_by_subject[:, layer_idx, :]  # Shape: (Subjects, Time)
+
+        bootstrapped_peaks: list[float] = []
+        for _ in range(n_bootstraps):
+            sample_indices = np.random.choice(n_subj, size=n_subj, replace=True)
+            boot_sample = layer_data[sample_indices, :]  # Shape: (Subjects, Time)
+            boot_mean = boot_sample.mean(axis=0)  # Shape: (Time,)
+            boot_smoothed = smooth_data(boot_mean)
+
+            window_segment = boot_smoothed[start_idx:end_idx]
+            peak_idx = start_idx + int(np.argmax(window_segment))
+            bootstrapped_peaks.append(float(time_points[peak_idx]))
+
+        final_peaks.append(float(np.mean(bootstrapped_peaks)))
+        final_errors.append(float(np.std(bootstrapped_peaks)))
+
+    layer_indices = list(range(1, len(layer_labels) + 1))
+    fig, ax = plt.subplots(figsize=(10, 6))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(layer_labels)))
+
+    ax.plot(layer_indices, final_peaks, "-", color="black", linewidth=1.5, zorder=1)
+
+    for i in range(n_layers):
+        if not np.isnan(final_peaks[i]):
+            ax.errorbar(
+                i + 1,
+                final_peaks[i],
+                yerr=final_errors[i],
+                fmt="o",
+                color=colors[i],
+                markersize=10,
+                capsize=5,
+                capthick=2,
+                linewidth=2,
+                zorder=2,
+            )
+
+    ax.set_title(f"Peak Latency per Layer ({model_name}) (Bootstrapped SEM)", fontsize=14)
+    ax.set_xticks(layer_indices)
+    ax.set_xticklabels(layer_labels, rotation=45, ha="right", fontsize=9)
+    ax.set_ylabel("Time of Peak Match (ms)")
+    ax.set_xlabel("Layers")
+    ax.grid(axis="y", linestyle=":", alpha=0.6)
+
+    fig.tight_layout()
+    fig.savefig(plots_dir / "rsa_peak_latency.png", dpi=160)
+    plt.close(fig)
