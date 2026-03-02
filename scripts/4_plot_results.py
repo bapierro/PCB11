@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_NAME = "resnet50"
+MODEL_NAME = "alexnet"
 RSA_DIR = PROJECT_ROOT / "outputs/clean_baseline/rsa" / MODEL_NAME
 SAVE_PATH = PROJECT_ROOT / f"outputs/clean_baseline/{MODEL_NAME}_final_dashboard.png"
 SAVE_PATH_BEHAVIOR = PROJECT_ROOT / f"outputs/clean_baseline/{MODEL_NAME}_behavioral_comparison.png"
@@ -29,7 +29,7 @@ def main():
     colors = plt.cm.viridis(np.linspace(0, 1, len(LAYERS)))
     
     # Set up a figure for behavioral model comparisons
-    fig2, axes2 = plt.subplots(3, 1, figsize=(8, 10))
+    fig2, axes2 = plt.subplots()
 
     # Store data for the bottom plot
     final_peaks = []
@@ -123,11 +123,13 @@ def main():
         model_file = RSA_DIR / f"{model}_rsa_spearman.npy"
         if model_file.exists():
             model_data = np.load(model_file).flatten()
-            axes2[i].bar(np.arange(len(model_data)), model_data, color=colors[:len(model_data)])
-            axes2[i].set_title(f"RSA with {model.capitalize()} Model", fontsize=12)
-            axes2[i].set_xticks(np.arange(len(LAYERS)))
-            axes2[i].set_xticklabels(LAYERS, rotation=25)
-            axes2[i].set_ylabel("Spearman Correlation")
+            axes2.plot(np.arange(len(model_data)), model_data, marker='o', linestyle='-',label=f"{model.capitalize()} Model")
+            axes2.set_title(f"RSA between the {MODEL_NAME.upper()} layers and the behavioral models", fontsize=12)
+            axes2.set_xticks(np.arange(len(LAYERS)))
+            axes2.set_xticklabels(LAYERS, rotation=25)
+            axes2.set_ylabel("Spearman Correlation")
+            axes2.set_ylim([0, np.max(model_data)*1.2])
+            axes2.legend(loc='lower right')
         else:
             print(f"Missing behavioral model data for: {model}")
 
