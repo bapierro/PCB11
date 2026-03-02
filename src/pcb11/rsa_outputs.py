@@ -275,3 +275,44 @@ def save_peak_latency_plot(
     fig.tight_layout()
     fig.savefig(plots_dir / "rsa_peak_latency.png", dpi=160)
     plt.close(fig)
+
+
+def compute_model_rsa(layer_rdms: list[np.ndarray], model_rdm: np.ndarray) -> np.ndarray:
+    """Compute RSA between each ANN layer and a static Model RDM."""
+    n_images = model_rdm.shape[0]
+    out = np.empty(len(layer_rdms), dtype=np.float64)
+    for idx, layer_rdm in enumerate(layer_rdms):
+        if layer_rdm.shape != (n_images, n_images):
+            raise SystemExit(f"Layer RDM shape {layer_rdm.shape} does not match Model RDM shape {(n_images, n_images)}")
+        rho = correlate_rdms(model_rdm, layer_rdm, correlation="spearman")
+        out[idx] = float(rho)
+    return out
+
+
+def save_spatial_vs_semantic_plot(
+    spatial_corr: np.ndarray,
+    semantic_corr: np.ndarray,
+    layer_labels: Sequence[str],
+    plots_dir: Path,
+    model_name: str,
+) -> None:
+    """Plot spatial vs semantic RSA across ANN layers."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    layer_indices = list(range(1, len(layer_labels) + 1))
+    
+    ax.plot(layer_indices, spatial_corr, "-o", color="#d62728", linewidth=2, label="Spatial Structure", zorder=2)
+    ax.plot(layer_indices, semantic_corr, "-s", color="#1f77b4", linewidth=2, label="Semantic Content", zorder=2)
+    
+    ax.set_title(f"Spatial vs Semantic RSA - {model_name}", fontsize=14)
+    ax.set_xticks(layer_indices)
+    ax.set_xticklabels(layer_labels, rotation=45, ha="right", fontsize=9)
+    ax.set_ylabel("Spearman Correlation")
+    ax.set_xlabel("Layers")
+    ax.legend(loc="best")
+    ax.grid(axis="y", linestyle=":", alpha=0.6)
+    
+    fig.tight_layout()
+    fig.savefig(plots_dir / "rsa_spatial_vs_semantic.png", dpi=160)
+    plt.close(fig)
+

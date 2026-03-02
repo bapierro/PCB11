@@ -32,7 +32,13 @@ from .meg_assets import (
     prepare_shared_meg_assets,
     sync_shared_meg_assets,
 )
-from .rsa_outputs import compute_rsa_timecourses_per_subject, save_peak_latency_plot, save_rsa_outputs
+from .rsa_outputs import (
+    compute_rsa_timecourses_per_subject, 
+    save_peak_latency_plot, 
+    save_rsa_outputs,
+    compute_model_rsa,
+    save_spatial_vs_semantic_plot,
+)
 IMAGES_DIR = Path("data/scenes/syns_meg36")
 
 MODEL_LAYER_PRESETS: dict[str, list[str]] = {
@@ -547,6 +553,39 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         model_name=f"{model} (n={n_subjects})",
     )
     _log("Stage 4/5 complete.")
+
+    _log("Stage 4.5/5: Computing spatial vs semantic Model RDMs RSA...")
+    spatial_mat_path = Path("data/meg/structureRDM_sq.mat")
+    semantic_mat_path = Path("data/meg/semanticRDM_sq.mat")
+    if spatial_mat_path.exists() and semantic_mat_path.exists():
+        from scipy.io import loadmat
+        from csv import writer
+        
+        spatial_model_rdm = loadmat(spatial_mat_path, squeeze_me=True)["RDM"]["RDM"].item()
+        semantic_model_rdm = loadmat(semantic_mat_path, squeeze_me=True)["RDM"]["RDM"].item()
+        
+        spatial_corr = compute_model_rsa(layer_rdms, spatial_model_rdm)
+        semantic_corr = compute_model_rsa(layer_rdms, semantic_model_rdm)
+        
+        np.save(dirs["rsa_data"] / "rsa_spatial_corr.npy", spatial_corr)
+        np.save(dirs["rsa_data"] / "rsa_semantic_corr.npy", semantic_corr)
+        
+        with (dirs["rsa_data"] / "rsa_spatial_vs_semantic.csv").open("w", newline="", encoding="utf-8") as handle:
+            hw = writer(handle)
+            hw.writerow(["layer_index", "layer_name", "spatial_spearman", "semantic_spearman"])
+            for idx, name in enumerate(layer_labels):
+                hw.writerow([idx + 1, name, spatial_corr[idx], semantic_corr[idx]])
+        
+        save_spatial_vs_semantic_plot(
+            spatial_corr=spatial_corr,
+            semantic_corr=semantic_corr,
+            layer_labels=layer_labels,
+            plots_dir=dirs["rsa_plots"],
+            model_name=model,
+        )
+    else:
+        _warn(warnings, "Missing structureRDM_sq.mat or semanticRDM_sq.mat; skipping spatial vs semantic RSA.")
+    _log("Stage 4.5/5 complete.")
 
     _log("Stage 5/5: Writing run manifest...")
     manifest = {
