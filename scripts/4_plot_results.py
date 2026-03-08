@@ -1,22 +1,46 @@
+#!/usr/bin/env python3
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_NAME = "alexnet"
-RSA_DIR = PROJECT_ROOT / "outputs/clean_baseline/rsa" / MODEL_NAME
-SAVE_PATH = PROJECT_ROOT / f"outputs/clean_baseline/{MODEL_NAME}_final_dashboard.png"
-SAVE_PATH_BEHAVIOR = PROJECT_ROOT / f"outputs/clean_baseline/{MODEL_NAME}_behavioral_comparison.png"
 
-# Define layers for each model
+# --- NEW: INTERACTIVE PIPELINE SELECTOR ---
+print("\nWhich pipeline results do you want to plot?")
+print("1: Clean Baseline (ImageNet)")
+print("2: Fine-Tuned Behavior Model")
+choice = input("Enter 1 or 2: ").strip()
+
+if choice == '2':
+    PIPELINE = "finetuned_behaviour"
+    alexnet_layers = [
+        "features_2", "features_5", "features_7", "features_9", "features_12", 
+        "shared_classifier_2", "shared_classifier_5", 
+        "head_app", "head_sem", "head_str"
+    ]
+else:
+    PIPELINE = "clean_baseline"
+    alexnet_layers = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+
+# --- 1. PICK YOUR MODEL HERE ---
+MODEL_NAME = "alexnet"
+
+# Define layers for each model dynamically based on menu choice
 MODELS = {
-    "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
+    "alexnet": alexnet_layers,
     "resnet50": ["layer1", "layer2", "layer3", "layer4"]
 }
 
 # Select layers based on the chosen model
 LAYERS = MODELS[MODEL_NAME]
+
+# Dynamic Paths
+RSA_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/rsa" / MODEL_NAME
+SAVE_PATH = PROJECT_ROOT / f"outputs/{PIPELINE}/{MODEL_NAME}_final_dashboard.png"
+SAVE_PATH_BEHAVIOR = PROJECT_ROOT / f"outputs/{PIPELINE}/{MODEL_NAME}_behavioral_comparison.png"
+
 
 def smooth_data(data, window=10):
     """Smooths jittery MEG data to find the true peak."""
@@ -24,6 +48,8 @@ def smooth_data(data, window=10):
     return smoothing
 
 def main():
+    print(f"\n=== Generating Dashboards for {MODEL_NAME.upper()} ({PIPELINE}) ===")
+    
     # Set up a two-panel figure
     fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
     colors = plt.cm.viridis(np.linspace(0, 1, len(LAYERS)))
@@ -89,7 +115,8 @@ def main():
             final_peaks.append(np.nan)
             final_errors.append(np.nan)
 
-    ax1.set_title(f"Brain-AI Correlation Time-Course ({MODEL_NAME.upper()})", fontsize=14)
+    # Added the pipeline name to the title so you know which graph you are looking at
+    ax1.set_title(f"Brain-AI Correlation Time-Course ({MODEL_NAME.upper()} - {PIPELINE.replace('_', ' ').title()})", fontsize=14)
     ax1.set_ylabel("Spearman Correlation")
     ax1.set_xlim([-200, 1000])
     ax1.axvline(x=0, color='black', linestyle='--', linewidth=1.5, label="Stimulus Onset (0ms)")
@@ -124,18 +151,27 @@ def main():
         if model_file.exists():
             model_data = np.load(model_file).flatten()
             axes2.plot(np.arange(len(model_data)), model_data, marker='o', linestyle='-',label=f"{model.capitalize()} Model")
-            axes2.set_title(f"RSA between the {MODEL_NAME.upper()} layers and the behavioral models", fontsize=12)
-            axes2.set_xticks(np.arange(len(LAYERS)))
-            axes2.set_xticklabels(LAYERS, rotation=25)
-            axes2.set_ylabel("Spearman Correlation")
-            axes2.set_ylim([0, np.max(model_data)*1.2])
-            axes2.legend(loc='lower right')
         else:
             print(f"Missing behavioral model data for: {model}")
+            
+    # Moved the title and labels outside the loop so they set correctly
+    axes2.set_title(f"RSA between {MODEL_NAME.upper()} and Behavioral Models", fontsize=12)
+    axes2.set_xticks(np.arange(len(LAYERS)))
+    axes2.set_xticklabels(LAYERS, rotation=25)
+    axes2.set_ylabel("Spearman Correlation")
+    # Wrap in a try-except just in case missing data makes np.max fail
+    try:
+        axes2.set_ylim([0, np.max(model_data)*1.2])
+    except:
+        pass
+    axes2.legend(loc='lower right')
 
     plt.tight_layout()
     fig2.savefig(SAVE_PATH_BEHAVIOR)
-    print(f"Dashboard saved to: {SAVE_PATH_BEHAVIOR}")
+    print(f"Behavioral Dashboard saved to: {SAVE_PATH_BEHAVIOR}")
+    
+    # Optional: plt.show() blocks the terminal until you close the windows. 
+    # Comment this out if you just want to generate the PNGs and keep moving.
     plt.show()
 
 if __name__ == "__main__":

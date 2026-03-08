@@ -8,12 +8,29 @@ from scipy.stats import rankdata
 # Set up project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# --- NEW: INTERACTIVE PIPELINE SELECTOR ---
+print("\nWhich pipeline are we running RSA for?")
+print("1: Clean Baseline (ImageNet)")
+print("2: Fine-Tuned Behavior Model")
+choice = input("Enter 1 or 2: ").strip()
+
+if choice == '2':
+    PIPELINE = "finetuned_behaviour"
+    alexnet_layers = [
+        "features_2", "features_5", "features_7", "features_9", "features_12", 
+        "shared_classifier_2", "shared_classifier_5", 
+        "head_app", "head_sem", "head_str"
+    ]
+else:
+    PIPELINE = "clean_baseline"
+    alexnet_layers = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+
 # --- 1. PICK YOUR MODEL HERE ---
 MODEL_NAME = "alexnet"  # Change to "resnet50" when you want to run the other model
 
 # 2. Define layers for each model
 MODELS = {
-    "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
+    "alexnet": alexnet_layers,
     "resnet50": ["layer1", "layer2", "layer3", "layer4"]
 }
 
@@ -22,8 +39,8 @@ LAYERS = MODELS[MODEL_NAME]
 
 # Define paths: location of computed RDMs, output for RSA results, MEG data source and 
 # three behavioral model RDMs
-RDM_DIR = PROJECT_ROOT / "outputs/clean_baseline/rdms" / MODEL_NAME
-OUTPUT_DIR = PROJECT_ROOT / "outputs/clean_baseline/rsa" / MODEL_NAME
+RDM_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/rdms" / MODEL_NAME
+OUTPUT_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/rsa" / MODEL_NAME
 MEG_FILE = PROJECT_ROOT / "data/meg/MEGRDMs_2D.mat"
 SEMANTIC_FILE = PROJECT_ROOT / "data/meg/semanticRDM_sq.mat"
 STRUCTURE_FILE = PROJECT_ROOT / "data/meg/structureRDM_sq.mat"

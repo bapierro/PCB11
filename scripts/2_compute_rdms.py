@@ -9,21 +9,39 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from thingsvision.core.rsa import compute_rdm
 
+# --- NEW: INTERACTIVE PIPELINE SELECTOR ---
+print("\nWhich pipeline features are we turning into RDMs?")
+print("1: Clean Baseline (ImageNet)")
+print("2: Fine-Tuned Behavior Model")
+choice = input("Enter 1 or 2: ").strip()
+
+if choice == '2':
+    PIPELINE = "finetuned_behaviour"
+    alexnet_layers = [
+        "features_2", "features_5", "features_7", "features_9", "features_12", 
+        "shared_classifier_2", "shared_classifier_5", 
+        "head_app", "head_sem", "head_str"
+    ]
+else:
+    PIPELINE = "clean_baseline"
+    # The original standard layers
+    alexnet_layers = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+
 # --- 1. PICK YOUR MODEL HERE ---
-MODEL_NAME = "alexnet"  # Change to "alexnet" when you want to run the other model
+MODEL_NAME = "alexnet"  # Change to "resnet50" when you want to run the other model
 
 # 2. Define layers for each model (should match extraction script)
 MODELS = {
-    "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
-    "resnet50": ["layer1", "layer2", "layer3", "layer4"]
+    "alexnet": alexnet_layers, # This now dynamically swaps based on your menu choice!
+    "resnet50": ["layer1", "layer2", "layer3", "layer4"] # Untouched!
 }
 
 # Select layers based on the chosen model
 LAYERS = MODELS[MODEL_NAME]
 
-# Define paths: location of extracted features and where to save RDMs
-FEATURES_DIR = PROJECT_ROOT / "outputs/clean_baseline/features" / MODEL_NAME
-OUTPUT_DIR = PROJECT_ROOT / "outputs/clean_baseline/rdms" / MODEL_NAME
+# Define paths: location of extracted features and where to save RDMs (Dynamic based on menu)
+FEATURES_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/features" / MODEL_NAME
+OUTPUT_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/rdms" / MODEL_NAME
 STIMULUS_ORDER_CSV = PROJECT_ROOT / "data/meg/stimulus_order.csv"
 
 def get_strict_image_order():
@@ -34,11 +52,12 @@ def get_strict_image_order():
     with open(STIMULUS_ORDER_CSV, newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
+            # No more regex! Just read the exact cleaned name from the CSV.
             order.append(row['file_name'].strip())
     return order
 
 def main():
-    print(f"\n=== Computing RDMs for {MODEL_NAME.upper()} ===")
+    print(f"\n=== Computing RDMs for {MODEL_NAME.upper()} ({PIPELINE}) ===")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     # Get the target order from the CSV file
@@ -55,6 +74,11 @@ def main():
         # Load features for the specific layer
         safe_layer = layer.replace(".", "_").replace("/", "_")
         feature_file = FEATURES_DIR / f"{MODEL_NAME}_{safe_layer}.npy"
+        
+        if not feature_file.exists():
+            print(f"[!] Warning: Could not find {feature_file.name}. Skipping.")
+            continue
+            
         features = np.load(feature_file)
         
         # Calculate Representational Dissimilarity Matrix (RDM) using correlation distance
