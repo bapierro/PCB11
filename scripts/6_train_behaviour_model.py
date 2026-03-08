@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import sys
-import re
 import pandas as pd
 from pathlib import Path
 from PIL import Image
@@ -15,7 +14,7 @@ import matplotlib.pyplot as plt
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_NAME = "alexnet"
 TRAIN_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_anderson_full"
-TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36"
+TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
 OUTPUT_WEIGHTS = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
 OUTPUT_PLOT = PROJECT_ROOT / f"outputs/loss_curve_{MODEL_NAME}.png"
@@ -29,33 +28,21 @@ class SYNSBehaviorDataset(Dataset):
         # Load the consensus labels
         df = pd.read_csv(labels_csv)
         
-        # 1. Map all available training images by their integer IDs (Scene, View)
-        # This handles leading zeros in the training folder if there are any
-        self.available_train_images = {}
-        for p in self.img_dir.glob("*.jpg"):
-            match = re.search(r'S(\d+)_Im(\d+)', p.name)
-            if match:
-                scene_int, view_int = int(match.group(1)), int(match.group(2))
-                self.available_train_images[(scene_int, view_int)] = p
-        
-        # 2. Get the set of test image IDs (using rglob to search all subfolders)
-        self.test_set_ids = set()
-        for p in Path(test_dir).rglob("*.jpg"):
-            match = re.search(r'S(\d+)_Im(\d+)', p.name)
-            if match:
-                scene_int, view_int = int(match.group(1)), int(match.group(2))
-                self.test_set_ids.add((scene_int, view_int))
+        # 1. Catalog the exact filenames in the test directory to prevent leakage
+        # We use a set of strings like "S1_Im5.jpg" for instant lookup
+        self.test_filenames = {p.name for p in Path(test_dir).rglob("*.jpg")}
                 
         self.samples = []
         for _, row in df.iterrows():
-            scene_id = int(row['SYNSscene'])
-            view_id = int(row['SYNSView'])
+            # Build the exact filename from the CSV IDs
+            # Assumes CSV has integers like SYNSscene=1, SYNSView=5
+            filename = f"S{int(row['SYNSscene'])}_Im{int(row['SYNSView'])}.jpg"
+            img_path = self.img_dir / filename
             
-            # STRICT CHECK: Ensure we have the file AND it is NOT in the test set IDs
-            if (scene_id, view_id) in self.available_train_images and (scene_id, view_id) not in self.test_set_ids:
-                img_path = self.available_train_images[(scene_id, view_id)]
-                
-                # Subtract 1 from categories if they are 1-indexed to make them 0-indexed for PyTorch
+            # STRICT CHECK: 
+            # 1. Does the file actually exist in the training folder?
+            # 2. Is it NOT one of the images used in our MEG test set?
+            if img_path.exists() and filename not in self.test_filenames:
                 self.samples.append({
                     "path": img_path,
                     "appearance": int(row['Appearance_Category']) - 1, 
@@ -64,7 +51,7 @@ class SYNSBehaviorDataset(Dataset):
                 })
                 
         print(f"Loaded {len(self.samples)} training images.")
-        print(f"Strictly excluded {len(self.test_set_ids)} MEG test images found across subfolders.")
+        print(f"Strictly excluded {len(self.test_filenames)} MEG test images found in folders.")
 
         # Dynamically find the number of classes for each task to build our model heads
         self.num_app_classes = max([s["appearance"] for s in self.samples]) + 1
