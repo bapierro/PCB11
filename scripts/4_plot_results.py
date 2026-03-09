@@ -45,7 +45,7 @@ SAVE_PATH_BEHAVIOR = PROJECT_ROOT / f"outputs/{PIPELINE}/{MODEL_NAME}_behavioral
 def smooth_data(data, window=10):
     """Smooths jittery MEG data to find the true peak."""
     smoothing = np.convolve(data, np.ones(window)/window, mode='same')
-    return smoothing
+    return data
 
 def main():
     print(f"\n=== Generating Dashboards for {MODEL_NAME.upper()} ({PIPELINE}) ===")
@@ -62,8 +62,8 @@ def main():
     final_errors = []
     
     # Setup time mapping
-    search_start_ms = 50
-    search_end_ms = 450
+    search_start_ms = -200
+    search_end_ms = 1000
     n_bootstraps = 1000 # 1000 is plenty for stable error bars without taking hours to run
     
     # 1. Plot the Time Courses (Top Panel)
