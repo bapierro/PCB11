@@ -17,5 +17,26 @@ This project is about studying whether behaviour-trained ANNs learn feature repr
 
 3. Run the script make_meg_images_good.py to get brighter test image set. These are stored into data/scenes/syns_meg36_real.
 
-4. Run the scripts in the order they have been numbered. The results are stored in the outputs-folder. Before running the scripts, make sure you have picked a correct model at the beginning of the script. The code currently supports the models "alexnet" and "resnet50". The visualize_rdms.py is an additional visualization script that can be run after running the scripts for extracting features and computing RDMs.
+4. Run the scripts in the order they have been numbered. The results are stored in the outputs-folder. Before running the scripts, make sure you have picked a correct model at the beginning of the script. The code currently supports the models "alexnet" and "resnet50". The scripts for computing the RDMs, RSA and plotting support an interactive choice of either a pre-trained or a fine-tuned model.
 
+## Overview of the scripts:
+
+- extract_features: Extracts the features from each layer of the prespecified pre-trained model. The features are saved as numpy arrays to outputs/clean_baseline/features/MODEL_NAME.
+
+- extract_finetuned_features: Extracts the features from each layer of the fine-tuned model. The features are saved as numpy arrays to outputs/finetuned_behaviour/features/alexnet. Currently the finetuning is supported only for Alexnet.
+
+- compute_rdms: Computes RDMs for either the pre-trained or the fine-tuned model, according to the user prompt. The results are saved to outputs/PIPELINE/rdms/MODEL_NAME.
+
+- compute_rsa: Computes RSA using either the pre-trained or the fine-tuned model, according to the user prompt. The RSA is computed between the model layer RDMs and MEG RDMs, as well as between the model layer RDMs and the three behavioral RDMs (i.e. visual appearance, spatial structure and semantic content RDMs). The results are saved to outputs/PIPELINE/rsa/MODEL_NAME.
+
+- plot_results: Plots the RSA results between the prespecified model and MEG RDMs (time series of Spearman correlations for each layer separately as well as the peak latencies for each layer). Additionally, plots the RSA results between the prespecified model and behavioral RDMs.
+
+- extract_behavioral_labels: reads the behavioral labels for each scene, computes the consensus labels and stores them into consensus_labels.csv.
+
+- train_behaviour_model: constructs training and validation data sets from scene images and the corresponding behavioral labels, and fine-tunes the pre-trained model with the data. Currently only supports Alexnet.
+
+- check_dims: a helper function to check dimensions of a prespecified numpy array and confirm the dimensions make sense.
+
+- make_meg_images_good: constructs a test image set from the Anderson images to get test images of the same brightness than the training images. 
+
+- visualize_rdms: an additional visualization script for plotting the RDMs.
