@@ -20,6 +20,8 @@ OUTPUT_WEIGHTS = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
 OUTPUT_PLOT = PROJECT_ROOT / f"outputs/loss_curve_{MODEL_NAME}.png"
 
 # --- 1. Custom Dataset with Leakage Prevention ---
+# Creates a dataset in which test images are excluded, and behavioral labels are associated 
+# with each training image.
 class SYNSBehaviorDataset(Dataset):
     def __init__(self, img_dir, test_dir, labels_csv, transform=None):
         self.img_dir = Path(img_dir)
@@ -33,6 +35,8 @@ class SYNSBehaviorDataset(Dataset):
         self.test_filenames = {p.name for p in Path(test_dir).rglob("*.jpg")}
                 
         self.samples = []
+
+        # loop through the CSV and build the dataset
         for _, row in df.iterrows():
             # Build the exact filename from the CSV IDs
             # Assumes CSV has integers like SYNSscene=1, SYNSView=5
@@ -43,6 +47,8 @@ class SYNSBehaviorDataset(Dataset):
             # 1. Does the file actually exist in the training folder?
             # 2. Is it NOT one of the images used in our MEG test set?
             if img_path.exists() and filename not in self.test_filenames:
+                # behavioral labels associated with the image are stored in the samples dictionary
+                # 1 is subtracted to convert from 1-based to 0-based indexing 
                 self.samples.append({
                     "path": img_path,
                     "appearance": int(row['Appearance_Category']) - 1, 
@@ -62,6 +68,7 @@ class SYNSBehaviorDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
+        # returns the image at the given image and the corresponding labels (also performs image transform)
         sample = self.samples[idx]
         image = Image.open(sample["path"]).convert("RGB")
         
@@ -90,7 +97,8 @@ class MultiTaskAlexNet(nn.Module):
         self.head_app = nn.Linear(in_features, num_app)
         self.head_sem = nn.Linear(in_features, num_sem)
         self.head_str = nn.Linear(in_features, num_str)
-
+    
+    # forward pass through the model (returns three separate outputs for the three tasks)
     def forward(self, x):
         x = self.features(x)
         x = self.avgpool(x)
@@ -112,7 +120,8 @@ def main():
     # Ensure output directory exists
     OUTPUT_WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
 
-    # Standard ImageNet transforms
+    # Standard ImageNet transforms (add image augmentations here? For example RandomAffine, ColorJitter, RandomHorizontalFlip)
+    # (then need to do a separate one for validation set without augmentations)
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -128,7 +137,10 @@ def main():
     
     print(f"Training on {train_size} images, Validating on {val_size} images.")
 
+    # choosing the batch size: small -> better accuracy but longer training time
+    # DataLoader loads the data in batches and shuffles it for training
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
+    # why isn't validation data shuffled?
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
 
     # Initialize model with the correct number of classes
@@ -138,10 +150,10 @@ def main():
         full_dataset.num_str_classes
     ).to(device)
 
-    # Loss functions and Optimizer
+    # Loss functions and Optimizer (Adam is one of the most popular optimizers)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    epochs = 3
+    epochs = 3 # number of times training is done on the entire training dataset
 
     # Trackers
     train_losses = []
@@ -150,21 +162,29 @@ def main():
 
     print("Starting multi-task fine-tuning...")
     
+    # model is trained for a number of epochs, and the best model (with the lowest validation loss) is saved to disk.
     try:
         for epoch in range(epochs):
             # --- TRAINING PHASE ---
             model.train()
             running_train_loss = 0.0
+            # loop through the training data and perform forward and backward passes
             for images, labels_app, labels_sem, labels_str in train_loader:
                 images, labels_app, labels_sem, labels_str = images.to(device), labels_app.to(device), labels_sem.to(device), labels_str.to(device)
 
+                # this sets the gradients to zero before backpropagation
                 optimizer.zero_grad()
+                # forward pass through the model to get predictions for all three tasks
                 preds_app, preds_sem, preds_str = model(images)
+                # compute the total loss
                 loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+                # backpropagation to compute gradients of the loss and update model weights
                 loss.backward()
+                # this updates the model's parameters based on the computed gradients
                 optimizer.step()
                 running_train_loss += loss.item()
-                
+            
+            # average the training losses for each batch to get the average training loss for the epoch
             avg_train_loss = running_train_loss / len(train_loader)
             train_losses.append(avg_train_loss)
 

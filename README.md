@@ -13,6 +13,9 @@ This project is about studying whether behaviour-trained ANNs learn feature repr
     - visualRDM_sq.mat
 - time.mat (a time vector)
 
-2. Download the extracted training data into the folder data/scenes. The same folder also contains the testing scene images, named syns_meg36.
+2. Download the extracted training data into data/scenes/syns_anderson_full. The folder data/scenes also contains the testing scene images, named syns_meg36. 
 
-3. Run the scripts in the order they have been numbered. The results are stored in the outputs-folder. Before running the scripts, make sure you have picked a correct model at the beginning of the script. The code currently supports the models "alexnet" and "resnet50". The visualize_rdms.py is an additional visualization script that can be run after running the scripts for extracting features and computing RDMs.
+3. Run the script make_meg_images_good.py to get brighter test image set. These are stored into data/scenes/syns_meg36_real.
+
+4. Run the scripts in the order they have been numbered. The results are stored in the outputs-folder. Before running the scripts, make sure you have picked a correct model at the beginning of the script. The code currently supports the models "alexnet" and "resnet50". The visualize_rdms.py is an additional visualization script that can be run after running the scripts for extracting features and computing RDMs.
+
