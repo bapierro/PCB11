@@ -6,7 +6,7 @@ from PIL import Image
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import models, transforms
 import matplotlib.pyplot as plt
 
@@ -20,8 +20,6 @@ OUTPUT_WEIGHTS = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
 OUTPUT_PLOT = PROJECT_ROOT / f"outputs/loss_curve_{MODEL_NAME}.png"
 
 # --- 1. Custom Dataset with Leakage Prevention ---
-# Creates a dataset in which test images are excluded, and behavioral labels are associated 
-# with each training image.
 class SYNSBehaviorDataset(Dataset):
     def __init__(self, img_dir, test_dir, labels_csv, transform=None):
         self.img_dir = Path(img_dir)
@@ -31,24 +29,15 @@ class SYNSBehaviorDataset(Dataset):
         df = pd.read_csv(labels_csv)
         
         # 1. Catalog the exact filenames in the test directory to prevent leakage
-        # We use a set of strings like "S1_Im5.jpg" for instant lookup
         self.test_filenames = {p.name for p in Path(test_dir).rglob("*.jpg")}
                 
         self.samples = []
-
-        # loop through the CSV and build the dataset
         for _, row in df.iterrows():
-            # Build the exact filename from the CSV IDs
-            # Assumes CSV has integers like SYNSscene=1, SYNSView=5
             filename = f"S{int(row['SYNSscene'])}_Im{int(row['SYNSView'])}.jpg"
             img_path = self.img_dir / filename
             
-            # STRICT CHECK: 
-            # 1. Does the file actually exist in the training folder?
-            # 2. Is it NOT one of the images used in our MEG test set?
+            # STRICT CHECK: Exclude images used in our MEG test set
             if img_path.exists() and filename not in self.test_filenames:
-                # behavioral labels associated with the image are stored in the samples dictionary
-                # 1 is subtracted to convert from 1-based to 0-based indexing 
                 self.samples.append({
                     "path": img_path,
                     "appearance": int(row['Appearance_Category']) - 1, 
@@ -59,7 +48,7 @@ class SYNSBehaviorDataset(Dataset):
         print(f"Loaded {len(self.samples)} training images.")
         print(f"Strictly excluded {len(self.test_filenames)} MEG test images found in folders.")
 
-        # Dynamically find the number of classes for each task to build our model heads
+        # Dynamically find the number of classes for each task
         self.num_app_classes = max([s["appearance"] for s in self.samples]) + 1
         self.num_sem_classes = max([s["semantic"] for s in self.samples]) + 1
         self.num_str_classes = max([s["structure"] for s in self.samples]) + 1
@@ -68,7 +57,6 @@ class SYNSBehaviorDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        # returns the image at the given image and the corresponding labels (also performs image transform)
         sample = self.samples[idx]
         image = Image.open(sample["path"]).convert("RGB")
         
@@ -78,34 +66,32 @@ class SYNSBehaviorDataset(Dataset):
         return image, sample["appearance"], sample["semantic"], sample["structure"]
 
 
-# --- 2. Multi-Task Model Architecture ---
+# --- 2. Multi-Task Model Architecture (Fully Unfrozen) ---
 class MultiTaskAlexNet(nn.Module):
     def __init__(self, num_app, num_sem, num_str):
         super().__init__()
         # Load standard AlexNet pretrained on ImageNet
         base_model = models.alexnet(weights=models.AlexNet_Weights.IMAGENET1K_V1)
         
-        # Keep features and average pooling
+        # Keep features and average pooling (Weights remain unfrozen so it can learn scene structures)
         self.features = base_model.features
         self.avgpool = base_model.avgpool
         
-        # Keep up to the second-to-last layer of the classifier (classifier[0] to classifier[5])
+        # Keep up to the second-to-last layer of the classifier
         self.shared_classifier = nn.Sequential(*list(base_model.classifier.children())[:-1])
         
-        # Create 3 separate heads replacing the final classifier[6] layer
+        # Create 3 separate heads replacing the final classifier layer
         in_features = 4096
         self.head_app = nn.Linear(in_features, num_app)
         self.head_sem = nn.Linear(in_features, num_sem)
         self.head_str = nn.Linear(in_features, num_str)
-    
-    # forward pass through the model (returns three separate outputs for the three tasks)
+
     def forward(self, x):
         x = self.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.shared_classifier(x)
         
-        # Branch out to the three tasks
         out_app = self.head_app(x)
         out_sem = self.head_sem(x)
         out_str = self.head_str(x)
@@ -120,90 +106,137 @@ def main():
     # Ensure output directory exists
     OUTPUT_WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
 
-    # Standard ImageNet transforms (add image augmentations here? For example RandomAffine, ColorJitter, RandomHorizontalFlip)
-    # (then need to do a separate one for validation set without augmentations)
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+    # 1. Define separate transform pipelines
+    train_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.RandomCrop(224),
+        transforms.RandomHorizontalFlip(p=0.5), # Augmentation to prevent overfitting
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
-    full_dataset = SYNSBehaviorDataset(TRAIN_IMG_DIR, TEST_IMG_DIR, LABELS_CSV, transform)
-    
-    # 90/10 Split to maximize training data while still getting a validation signal
-    val_size = int(0.10 * len(full_dataset))
-    train_size = len(full_dataset) - val_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-    
-    print(f"Training on {train_size} images, Validating on {val_size} images.")
+    val_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224), # Strict center crop for accurate validation
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
 
-    # choosing the batch size: small -> better accuracy but longer training time
-    # DataLoader loads the data in batches and shuffles it for training
+    # 2. Create TWO dataset instances, passing the different transforms
+    full_train_dataset = SYNSBehaviorDataset(TRAIN_IMG_DIR, TEST_IMG_DIR, LABELS_CSV, transform=train_transform)
+    full_val_dataset = SYNSBehaviorDataset(TRAIN_IMG_DIR, TEST_IMG_DIR, LABELS_CSV, transform=val_transform)
+    
+    # 3. Generate random indices for the 90/10 split
+    dataset_size = len(full_train_dataset)
+    val_size = int(0.20 * dataset_size)
+    train_size = dataset_size - val_size
+    
+    indices = torch.randperm(dataset_size).tolist()
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
+    
+    # 4. Create the final subsets using those indices
+    train_dataset = Subset(full_train_dataset, train_indices)
+    val_dataset = Subset(full_val_dataset, val_indices)
+    
+    print(f"Training on {train_size} images with augmentations.")
+    print(f"Validating on {val_size} images with strict cropping.")
+
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
-    # why isn't validation data shuffled?
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
 
-    # Initialize model with the correct number of classes
+    # Initialize model
     model = MultiTaskAlexNet(
-        full_dataset.num_app_classes, 
-        full_dataset.num_sem_classes, 
-        full_dataset.num_str_classes
+        full_train_dataset.num_app_classes, 
+        full_train_dataset.num_sem_classes, 
+        full_train_dataset.num_str_classes
     ).to(device)
 
-    # Loss functions and Optimizer (Adam is one of the most popular optimizers)
+    # Loss functions and Optimizer (L2 Regularization / weight_decay removed)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    epochs = 3 # number of times training is done on the entire training dataset
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+    epochs = 20
 
     # Trackers
     train_losses = []
     val_losses = []
-    best_val_loss = float('inf') # Tracks the absolute lowest validation loss
+    best_val_loss = float('inf')
 
     print("Starting multi-task fine-tuning...")
     
-    # model is trained for a number of epochs, and the best model (with the lowest validation loss) is saved to disk.
     try:
         for epoch in range(epochs):
             # --- TRAINING PHASE ---
             model.train()
             running_train_loss = 0.0
-            # loop through the training data and perform forward and backward passes
+            
+            train_correct_app, train_correct_sem, train_correct_str = 0, 0, 0
+            train_total = 0
+
             for images, labels_app, labels_sem, labels_str in train_loader:
                 images, labels_app, labels_sem, labels_str = images.to(device), labels_app.to(device), labels_sem.to(device), labels_str.to(device)
 
-                # this sets the gradients to zero before backpropagation
                 optimizer.zero_grad()
-                # forward pass through the model to get predictions for all three tasks
                 preds_app, preds_sem, preds_str = model(images)
-                # compute the total loss
                 loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
-                # backpropagation to compute gradients of the loss and update model weights
                 loss.backward()
-                # this updates the model's parameters based on the computed gradients
                 optimizer.step()
                 running_train_loss += loss.item()
-            
-            # average the training losses for each batch to get the average training loss for the epoch
+                
+                _, predicted_app = torch.max(preds_app.data, 1)
+                _, predicted_sem = torch.max(preds_sem.data, 1)
+                _, predicted_str = torch.max(preds_str.data, 1)
+                
+                train_total += labels_app.size(0)
+                train_correct_app += (predicted_app == labels_app).sum().item()
+                train_correct_sem += (predicted_sem == labels_sem).sum().item()
+                train_correct_str += (predicted_str == labels_str).sum().item()
+                
             avg_train_loss = running_train_loss / len(train_loader)
             train_losses.append(avg_train_loss)
+            
+            acc_train_app = 100 * train_correct_app / train_total
+            acc_train_sem = 100 * train_correct_sem / train_total
+            acc_train_str = 100 * train_correct_str / train_total
 
             # --- VALIDATION PHASE ---
             model.eval()
             running_val_loss = 0.0
-            with torch.no_grad(): # Don't calculate gradients during validation!
+            
+            val_correct_app, val_correct_sem, val_correct_str = 0, 0, 0
+            val_total = 0
+
+            with torch.no_grad(): 
                 for images, labels_app, labels_sem, labels_str in val_loader:
                     images, labels_app, labels_sem, labels_str = images.to(device), labels_app.to(device), labels_sem.to(device), labels_str.to(device)
+                    
                     preds_app, preds_sem, preds_str = model(images)
                     loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
                     running_val_loss += loss.item()
                     
+                    _, predicted_app = torch.max(preds_app.data, 1)
+                    _, predicted_sem = torch.max(preds_sem.data, 1)
+                    _, predicted_str = torch.max(preds_str.data, 1)
+                    
+                    val_total += labels_app.size(0)
+                    val_correct_app += (predicted_app == labels_app).sum().item()
+                    val_correct_sem += (predicted_sem == labels_sem).sum().item()
+                    val_correct_str += (predicted_str == labels_str).sum().item()
+                    
             avg_val_loss = running_val_loss / len(val_loader)
             val_losses.append(avg_val_loss)
+            
+            acc_val_app = 100 * val_correct_app / val_total
+            acc_val_sem = 100 * val_correct_sem / val_total
+            acc_val_str = 100 * val_correct_str / val_total
 
-            print(f"Epoch [{epoch+1}/{epochs}] | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+            print(f"\nEpoch [{epoch+1}/{epochs}] Summary:")
+            print(f"  Loss | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f}")
+            print(f"  App. Acc | Train: {acc_train_app:.2f}% | Val: {acc_val_app:.2f}%")
+            print(f"  Sem. Acc | Train: {acc_train_sem:.2f}% | Val: {acc_val_sem:.2f}%")
+            print(f"  Str. Acc | Train: {acc_train_str:.2f}% | Val: {acc_val_str:.2f}%")
 
-            # --- CHECKPOINTING (Save only if it's the best so far) ---
+            # --- CHECKPOINTING ---
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 torch.save(model.state_dict(), OUTPUT_WEIGHTS)
@@ -222,7 +255,7 @@ def main():
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(OUTPUT_PLOT)
-    print(f"Loss curve saved to {OUTPUT_PLOT}. Check this file to verify your parameters!")
+    print(f"\nLoss curve saved to {OUTPUT_PLOT}. Check this file to verify your parameters!")
 
 if __name__ == "__main__":
     main()
