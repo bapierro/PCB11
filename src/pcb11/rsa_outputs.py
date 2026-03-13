@@ -295,24 +295,37 @@ def save_spatial_vs_semantic_plot(
     layer_labels: Sequence[str],
     plots_dir: Path,
     model_name: str,
+    x_positions: np.ndarray | None = None,
+    x_label: str = "Layers",
+    output_name: str = "rsa_spatial_vs_semantic.png",
 ) -> None:
     """Plot spatial vs semantic RSA across ANN layers."""
     fig, ax = plt.subplots(figsize=(10, 6))
-    
-    layer_indices = list(range(1, len(layer_labels) + 1))
-    
-    ax.plot(layer_indices, spatial_corr, "-o", color="#d62728", linewidth=2, label="Spatial Structure", zorder=2)
-    ax.plot(layer_indices, semantic_corr, "-s", color="#1f77b4", linewidth=2, label="Semantic Content", zorder=2)
-    
+
+    if x_positions is None:
+        x_values = np.arange(1, len(layer_labels) + 1, dtype=np.float64)
+    else:
+        x_values = np.asarray(x_positions, dtype=np.float64)
+        if x_values.shape != spatial_corr.shape:
+            raise ValueError(
+                f"x_positions shape {x_values.shape} does not match correlation shape {spatial_corr.shape}."
+            )
+
+    ax.plot(x_values, spatial_corr, "-o", color="#d62728", linewidth=2, label="Spatial Structure", zorder=2)
+    ax.plot(x_values, semantic_corr, "-s", color="#1f77b4", linewidth=2, label="Semantic Content", zorder=2)
+
     ax.set_title(f"Spatial vs Semantic RSA - {model_name}", fontsize=14)
-    ax.set_xticks(layer_indices)
-    ax.set_xticklabels(layer_labels, rotation=45, ha="right", fontsize=9)
     ax.set_ylabel("Spearman Correlation")
-    ax.set_xlabel("Layers")
+    ax.set_xlabel(x_label)
+    if x_positions is None:
+        ax.set_xticks(x_values)
+        ax.set_xticklabels(layer_labels, rotation=45, ha="right", fontsize=9)
+    else:
+        ax.set_xlim(0.0, 1.0)
+        ax.grid(axis="x", linestyle=":", alpha=0.35)
     ax.legend(loc="best")
     ax.grid(axis="y", linestyle=":", alpha=0.6)
-    
-    fig.tight_layout()
-    fig.savefig(plots_dir / "rsa_spatial_vs_semantic.png", dpi=160)
-    plt.close(fig)
 
+    fig.tight_layout()
+    fig.savefig(plots_dir / output_name, dpi=160)
+    plt.close(fig)

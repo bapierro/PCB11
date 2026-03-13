@@ -65,6 +65,20 @@ poetry run python scripts/export_meg_bundle.py
 poetry run python scripts/prepare_meg_assets.py
 ```
 
+Aggregate multiple completed runs on a shared relative-compute axis:
+
+```bash
+poetry run python scripts/compare_model_rsa.py \
+  --output-root outputs/cross_model_rsa
+```
+
+This writes:
+- raw spatial/semantic averages over relative cumulative compute
+- peak-normalized spatial/semantic averages
+- per-model peak-location plots and CSV/JSON summaries
+
+Compute normalization uses architecture-specific MAC estimates with a default `224 x 224` input assumption. You can override that with `--input-size` if your runs used a different resolution.
+
 
 
 ## Pipeline CLI

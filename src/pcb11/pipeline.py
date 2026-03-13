@@ -32,6 +32,7 @@ from .meg_assets import (
     prepare_shared_meg_assets,
     sync_shared_meg_assets,
 )
+from .model_compute import build_relative_compute_axis
 from .rsa_outputs import (
     compute_rsa_timecourses_per_subject, 
     save_peak_latency_plot, 
@@ -560,22 +561,57 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
     if spatial_mat_path.exists() and semantic_mat_path.exists():
         from scipy.io import loadmat
         from csv import writer
-        
+
         spatial_model_rdm = loadmat(spatial_mat_path, squeeze_me=True)["RDM"]["RDM"].item()
         semantic_model_rdm = loadmat(semantic_mat_path, squeeze_me=True)["RDM"]["RDM"].item()
-        
+
         spatial_corr = compute_model_rsa(layer_rdms, spatial_model_rdm)
         semantic_corr = compute_model_rsa(layer_rdms, semantic_model_rdm)
-        
+
         np.save(dirs["rsa_data"] / "rsa_spatial_corr.npy", spatial_corr)
         np.save(dirs["rsa_data"] / "rsa_semantic_corr.npy", semantic_corr)
-        
+
+        compute_axis = None
+        try:
+            compute_axis = build_relative_compute_axis(model_name=model, layer_labels=layers)
+        except ValueError as exc:
+            _warn(warnings, f"Could not estimate relative compute axis for {model}: {exc}")
+
         with (dirs["rsa_data"] / "rsa_spatial_vs_semantic.csv").open("w", newline="", encoding="utf-8") as handle:
             hw = writer(handle)
-            hw.writerow(["layer_index", "layer_name", "spatial_spearman", "semantic_spearman"])
+            hw.writerow(
+                [
+                    "layer_index",
+                    "layer_name",
+                    "module_name",
+                    "spatial_spearman",
+                    "semantic_spearman",
+                    "checkpoint_macs",
+                    "cumulative_macs",
+                    "relative_compute",
+                ]
+            )
             for idx, name in enumerate(layer_labels):
-                hw.writerow([idx + 1, name, spatial_corr[idx], semantic_corr[idx]])
-        
+                checkpoint_macs = ""
+                cumulative_macs = ""
+                relative_compute = ""
+                if compute_axis is not None:
+                    checkpoint_macs = float(compute_axis.checkpoint_costs[idx])
+                    cumulative_macs = float(compute_axis.cumulative_costs[idx])
+                    relative_compute = float(compute_axis.relative_positions[idx])
+                hw.writerow(
+                    [
+                        idx + 1,
+                        name,
+                        layers[idx],
+                        spatial_corr[idx],
+                        semantic_corr[idx],
+                        checkpoint_macs,
+                        cumulative_macs,
+                        relative_compute,
+                    ]
+                )
+
         save_spatial_vs_semantic_plot(
             spatial_corr=spatial_corr,
             semantic_corr=semantic_corr,
@@ -583,6 +619,17 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
             plots_dir=dirs["rsa_plots"],
             model_name=model,
         )
+        if compute_axis is not None:
+            save_spatial_vs_semantic_plot(
+                spatial_corr=spatial_corr,
+                semantic_corr=semantic_corr,
+                layer_labels=layer_labels,
+                plots_dir=dirs["rsa_plots"],
+                model_name=model,
+                x_positions=compute_axis.relative_positions,
+                x_label="Relative Cumulative Compute",
+                output_name="rsa_spatial_vs_semantic_relative_compute.png",
+            )
     else:
         _warn(warnings, "Missing structureRDM_sq.mat or semanticRDM_sq.mat; skipping spatial vs semantic RSA.")
     _log("Stage 4.5/5 complete.")
