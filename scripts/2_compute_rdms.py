@@ -9,7 +9,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from thingsvision.core.rsa import compute_rdm
 
-# --- NEW: INTERACTIVE PIPELINE SELECTOR ---
+# --- 1. PICK YOUR MODEL HERE ---
+MODEL_NAME = "resnet50"  # Change to "resnet50" when you want to run the other model
+
+# --- 2. INTERACTIVE PIPELINE SELECTOR ---
 print("\nWhich pipeline features are we turning into RDMs?")
 print("1: Clean Baseline (ImageNet)")
 print("2: Fine-Tuned Behavior Model")
@@ -17,27 +20,20 @@ choice = input("Enter 1 or 2: ").strip()
 
 if choice == '2':
     PIPELINE = "finetuned_behaviour"
-    alexnet_layers = [
-        "features_2", "features_5", "features_7", "features_9", "features_12", 
-        "shared_classifier_2", "shared_classifier_5", 
-        "head_app", "head_sem", "head_str"
-    ]
+    if MODEL_NAME == "alexnet":
+        LAYERS = [
+            "features_2", "features_5", "features_7", "features_9", "features_12", 
+            "shared_classifier_2", "shared_classifier_5", 
+            "head_app", "head_sem", "head_str"
+        ]
+    elif MODEL_NAME == "resnet50":
+        LAYERS = ["layer1", "layer2", "layer3", "layer4", "head_app", "head_sem", "head_str"]
 else:
     PIPELINE = "clean_baseline"
-    # The original standard layers
-    alexnet_layers = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
-
-# --- 1. PICK YOUR MODEL HERE ---
-MODEL_NAME = "alexnet"  # Change to "resnet50" when you want to run the other model
-
-# 2. Define layers for each model (should match extraction script)
-MODELS = {
-    "alexnet": alexnet_layers, # This now dynamically swaps based on your menu choice!
-    "resnet50": ["layer1", "layer2", "layer3", "layer4"] # Untouched!
-}
-
-# Select layers based on the chosen model
-LAYERS = MODELS[MODEL_NAME]
+    if MODEL_NAME == "alexnet":
+        LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+    elif MODEL_NAME == "resnet50":
+        LAYERS = ["layer1", "layer2", "layer3", "layer4"]
 
 # Define paths: location of extracted features and where to save RDMs (Dynamic based on menu)
 FEATURES_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/features" / MODEL_NAME

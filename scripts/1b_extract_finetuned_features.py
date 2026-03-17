@@ -10,11 +10,12 @@ import pandas as pd
 import csv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = PROJECT_ROOT / "outputs/finetuned_behaviour_alexnet.pth"
+MODEL_NAME = "resnet50" # currently supports "alexnet" or "resnet50" (must match the model used during training)
+MODEL_PATH = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
 TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 STIMULUS_ORDER_CSV = PROJECT_ROOT / "data/meg/stimulus_order.csv"
 LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
-OUTPUT_DIR = PROJECT_ROOT / "outputs/finetuned_behaviour/features/alexnet"
+OUTPUT_DIR = PROJECT_ROOT / f"outputs/finetuned_behaviour/features/{MODEL_NAME}"
 
 class MultiTaskAlexNet(nn.Module):
     def __init__(self, num_app, num_sem, num_str):
@@ -34,6 +35,27 @@ class MultiTaskAlexNet(nn.Module):
         x = torch.flatten(x, 1)
         x = self.shared_classifier(x)
         return self.head_app(x), self.head_sem(x), self.head_str(x)
+    
+class MultiTaskResNet50(nn.Module):
+    def __init__(self, num_app, num_sem, num_str):
+        super().__init__()
+        base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+        self.backbone = nn.Sequential(*list(base_model.children())[:-1])
+
+        in_features = base_model.fc.in_features  # 2048
+        
+        self.head_app = nn.Linear(in_features, num_app)
+        self.head_sem = nn.Linear(in_features, num_sem)
+        self.head_str = nn.Linear(in_features, num_str)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = torch.flatten(x, 1)
+        
+        out_app = self.head_app(x)
+        out_sem = self.head_sem(x)
+        out_str = self.head_str(x)
+        return out_app, out_sem, out_str
 
 def get_strict_image_order():
     """Reads the exact file names from the CSV since the data is now perfectly clean."""
@@ -52,16 +74,27 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     df = pd.read_csv(LABELS_CSV)
-    model = MultiTaskAlexNet(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
+    if MODEL_NAME == "alexnet":
+        model = MultiTaskAlexNet(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
+    elif MODEL_NAME == "resnet50":
+        model = MultiTaskResNet50(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
 
-    layers_to_extract = {
-        "features_2": model.features[2], "features_5": model.features[5],
-        "features_7": model.features[7], "features_9": model.features[9],
-        "features_12": model.features[12], "shared_classifier_2": model.shared_classifier[2],
-        "shared_classifier_5": model.shared_classifier[5]
-    }
+    if MODEL_NAME == "alexnet":
+        layers_to_extract = {
+            "features_2": model.features[2], "features_5": model.features[5],
+            "features_7": model.features[7], "features_9": model.features[9],
+            "features_12": model.features[12], "shared_classifier_2": model.shared_classifier[2],
+            "shared_classifier_5": model.shared_classifier[5]
+        }
+    elif MODEL_NAME == "resnet50":
+        layers_to_extract = {
+            "layer1": model.backbone[4],
+            "layer2": model.backbone[5],
+            "layer3": model.backbone[6],
+            "layer4": model.backbone[7]
+        }
 
     activations = {name: [] for name in layers_to_extract.keys()}
     activations["head_app"] = []
@@ -95,7 +128,7 @@ def main():
     for handle in handles: handle.remove()
 
     for name, acts in activations.items():
-        np.save(OUTPUT_DIR / f"alexnet_{name}.npy", np.stack(acts))
+        np.save(OUTPUT_DIR / f"{MODEL_NAME}_{name}.npy", np.stack(acts))
         print(f" - Saved {name}.npy")
 
 if __name__ == "__main__":

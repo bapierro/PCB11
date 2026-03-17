@@ -7,34 +7,31 @@ from pathlib import Path
 # Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# --- NEW: INTERACTIVE PIPELINE SELECTOR ---
-print("\nWhich pipeline results do you want to plot?")
+# --- 1. PICK YOUR MODEL HERE ---
+MODEL_NAME = "resnet50"  # alexnet or resnet50
+
+# --- 2: INTERACTIVE PIPELINE SELECTOR ---
+print("\nWhich pipeline are we running RSA for?")
 print("1: Clean Baseline (ImageNet)")
 print("2: Fine-Tuned Behavior Model")
 choice = input("Enter 1 or 2: ").strip()
 
 if choice == '2':
     PIPELINE = "finetuned_behaviour"
-    alexnet_layers = [
-        "features_2", "features_5", "features_7", "features_9", "features_12", 
-        "shared_classifier_2", "shared_classifier_5", 
-        "head_app", "head_sem", "head_str"
-    ]
+    if MODEL_NAME == "alexnet":
+        LAYERS = [
+            "features_2", "features_5", "features_7", "features_9", "features_12", 
+            "shared_classifier_2", "shared_classifier_5", 
+            "head_app", "head_sem", "head_str"
+        ]
+    elif MODEL_NAME == "resnet50":
+        LAYERS = ["layer1", "layer2", "layer3", "layer4", "head_app", "head_sem", "head_str"]
 else:
     PIPELINE = "clean_baseline"
-    alexnet_layers = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
-
-# --- 1. PICK YOUR MODEL HERE ---
-MODEL_NAME = "alexnet"
-
-# Define layers for each model dynamically based on menu choice
-MODELS = {
-    "alexnet": alexnet_layers,
-    "resnet50": ["layer1", "layer2", "layer3", "layer4"]
-}
-
-# Select layers based on the chosen model
-LAYERS = MODELS[MODEL_NAME]
+    if MODEL_NAME == "alexnet":
+        LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
+    elif MODEL_NAME == "resnet50":
+        LAYERS = ["layer1", "layer2", "layer3", "layer4"]
 
 # Dynamic Paths
 RSA_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/rsa" / MODEL_NAME

@@ -9,11 +9,12 @@ import re
 
 # --- Setup Paths ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = PROJECT_ROOT / "outputs/finetuned_behaviour_alexnet.pth"
+MODEL_NAME = "resnet50" # currently supports "alexnet" or "resnet50" (must match the model used during training)
+MODEL_PATH = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
 TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
 
-# --- 1. Model Architecture (Matches training exactly) ---
+# --- 1a. Model Architecture for AlexNet (Matches training exactly) ---
 class MultiTaskAlexNet(nn.Module):
     def __init__(self, num_app, num_sem, num_str):
         super().__init__()
@@ -33,6 +34,28 @@ class MultiTaskAlexNet(nn.Module):
         x = torch.flatten(x, 1)
         x = self.shared_classifier(x)
         return self.head_app(x), self.head_sem(x), self.head_str(x)
+    
+# --- 1b. Model Architecture for ResNet50 (Matches training exactly) ---
+class MultiTaskResNet50(nn.Module):
+    def __init__(self, num_app, num_sem, num_str):
+        super().__init__()
+        base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+        self.backbone = nn.Sequential(*list(base_model.children())[:-1])
+
+        in_features = base_model.fc.in_features  # 2048
+        
+        self.head_app = nn.Linear(in_features, num_app)
+        self.head_sem = nn.Linear(in_features, num_sem)
+        self.head_str = nn.Linear(in_features, num_str)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = torch.flatten(x, 1)
+        
+        out_app = self.head_app(x)
+        out_sem = self.head_sem(x)
+        out_str = self.head_str(x)
+        return out_app, out_sem, out_str
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -60,7 +83,10 @@ def main():
 
     # 3. Initialize and Load Model
     num_app, num_sem, num_str = df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()
-    model = MultiTaskAlexNet(num_app, num_sem, num_str).to(device)
+    if MODEL_NAME == "alexnet":
+        model = MultiTaskAlexNet(num_app, num_sem, num_str).to(device)
+    elif MODEL_NAME == "resnet50":
+        model = MultiTaskResNet50(num_app, num_sem, num_str).to(device)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
 

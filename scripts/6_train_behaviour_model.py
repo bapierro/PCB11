@@ -9,10 +9,12 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import models, transforms
 import matplotlib.pyplot as plt
+import tempfile
+import shutil
 
 # --- Project Setup ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_NAME = "alexnet"
+MODEL_NAME = "resnet50" # currently supports "alexnet" or "resnet50"
 TRAIN_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_anderson_full"
 TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
@@ -66,7 +68,7 @@ class SYNSBehaviorDataset(Dataset):
         return image, sample["appearance"], sample["semantic"], sample["structure"]
 
 
-# --- 2. Multi-Task Model Architecture (Fully Unfrozen) ---
+# --- 2a. Multi-Task Model Architecture for AlexNet (Fully Unfrozen) ---
 class MultiTaskAlexNet(nn.Module):
     def __init__(self, num_app, num_sem, num_str):
         super().__init__()
@@ -96,7 +98,34 @@ class MultiTaskAlexNet(nn.Module):
         out_sem = self.head_sem(x)
         out_str = self.head_str(x)
         return out_app, out_sem, out_str
+    
+# --- 2b. Multi-Task Model Architecture for ResNet50 (Fully Unfrozen) ---
+class MultiTaskResNet50(nn.Module):
+    def __init__(self, num_app, num_sem, num_str):
+        super().__init__()
+        # Load standard ResNet50 pretrained on ImageNet
+        base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
 
+        # Shared backbone (everything except final FC layer)
+        # now the last layer is the avgpool, so no need for average pooling explicitly
+        self.backbone = nn.Sequential(*list(base_model.children())[:-1])
+
+        # Feature size from ResNet50
+        in_features = base_model.fc.in_features  # 2048
+        
+        # Create 3 separate heads replacing the final classifier layer
+        self.head_app = nn.Linear(in_features, num_app)
+        self.head_sem = nn.Linear(in_features, num_sem)
+        self.head_str = nn.Linear(in_features, num_str)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = torch.flatten(x, 1)
+        
+        out_app = self.head_app(x)
+        out_sem = self.head_sem(x)
+        out_str = self.head_str(x)
+        return out_app, out_sem, out_str
 
 # --- 3. Training Loop ---
 def main():
@@ -146,16 +175,23 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
 
     # Initialize model
-    model = MultiTaskAlexNet(
-        full_train_dataset.num_app_classes, 
-        full_train_dataset.num_sem_classes, 
-        full_train_dataset.num_str_classes
-    ).to(device)
+    if MODEL_NAME == "alexnet":
+        model = MultiTaskAlexNet(
+            full_train_dataset.num_app_classes, 
+            full_train_dataset.num_sem_classes, 
+            full_train_dataset.num_str_classes
+        ).to(device)
+    elif MODEL_NAME == "resnet50":
+        model = MultiTaskResNet50(
+            full_train_dataset.num_app_classes, 
+            full_train_dataset.num_sem_classes, 
+            full_train_dataset.num_str_classes
+        ).to(device)
 
     # Loss functions and Optimizer (L2 Regularization / weight_decay removed)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4)
-    epochs = 20
+    epochs = 10
 
     # Trackers
     train_losses = []
@@ -239,7 +275,13 @@ def main():
             # --- CHECKPOINTING ---
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
-                torch.save(model.state_dict(), OUTPUT_WEIGHTS)
+                # Save to a temporary local file first
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pth") as tmp:
+                    torch.save(model.state_dict(), tmp.name)
+                    tmp_path = tmp.name
+
+                # Move the file to the final location
+                shutil.move(tmp_path, OUTPUT_WEIGHTS)
                 print(f"  -> Best model saved! (Val Loss: {best_val_loss:.4f})")
 
     except KeyboardInterrupt:
