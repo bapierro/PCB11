@@ -10,16 +10,23 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from thingsvision.core.rsa import compute_rdm
 
 # --- 1. PICK YOUR MODEL HERE ---
-MODEL_NAME = "resnet50"  # Change to "resnet50" when you want to run the other model
+print("\n--- MODEL SELECTION ---")
+print("1: AlexNet")
+print("2: ResNet50")
+model_choice = input("Enter 1 or 2: ").strip()
+MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50"
 
 # --- 2. INTERACTIVE PIPELINE SELECTOR ---
-print("\nWhich pipeline features are we turning into RDMs?")
+print("\nWhich pipeline are we running?")
 print("1: Clean Baseline (ImageNet)")
-print("2: Fine-Tuned Behavior Model")
-choice = input("Enter 1 or 2: ").strip()
+print("2: Fine-Tuned (All/Multi-Task)")
+print("3: Fine-Tuned (Appearance)")
+print("4: Fine-Tuned (Semantic)")
+print("5: Fine-Tuned (Structure)")
+choice = input("Enter 1, 2, 3, 4, or 5: ").strip()
 
 if choice == '2':
-    PIPELINE = "finetuned_behaviour"
+    PIPELINE = "finetuned_all"
     if MODEL_NAME == "alexnet":
         LAYERS = [
             "features_2", "features_5", "features_7", "features_9", "features_12", 
@@ -28,6 +35,18 @@ if choice == '2':
         ]
     elif MODEL_NAME == "resnet50":
         LAYERS = ["layer1", "layer2", "layer3", "layer4", "head_app", "head_sem", "head_str"]
+
+elif choice in ['3', '4', '5']:
+    task_map = {'3': 'appearance', '4': 'semantic', '5': 'structure'}
+    PIPELINE = f"finetuned_{task_map[choice]}"
+    
+    if MODEL_NAME == "alexnet":
+        # Using underscores because script 1b saved them with underscores
+        LAYERS = ["features_2", "features_5", "features_7", "features_9", "features_12", "classifier_2", "classifier_5", "classifier_6"]
+    elif MODEL_NAME == "resnet50":
+        # Kept strictly to the backbone layers, exactly matching the baseline!
+        LAYERS = ["layer1", "layer2", "layer3", "layer4"]
+
 else:
     PIPELINE = "clean_baseline"
     if MODEL_NAME == "alexnet":

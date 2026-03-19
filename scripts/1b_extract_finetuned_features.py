@@ -10,13 +10,12 @@ import pandas as pd
 import csv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_NAME = "resnet50" # currently supports "alexnet" or "resnet50" (must match the model used during training)
-MODEL_PATH = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
+
 TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 STIMULUS_ORDER_CSV = PROJECT_ROOT / "data/meg/stimulus_order.csv"
 LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
-OUTPUT_DIR = PROJECT_ROOT / f"outputs/finetuned_behaviour/features/{MODEL_NAME}"
 
+# --- Custom Architectures (Used only if TARGET_TASK == 'all') ---
 class MultiTaskAlexNet(nn.Module):
     def __init__(self, num_app, num_sem, num_str):
         super().__init__()
@@ -41,7 +40,6 @@ class MultiTaskResNet50(nn.Module):
         super().__init__()
         base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
         self.backbone = nn.Sequential(*list(base_model.children())[:-1])
-
         in_features = base_model.fc.in_features  # 2048
         
         self.head_app = nn.Linear(in_features, num_app)
@@ -51,7 +49,6 @@ class MultiTaskResNet50(nn.Module):
     def forward(self, x):
         x = self.backbone(x)
         x = torch.flatten(x, 1)
-        
         out_app = self.head_app(x)
         out_sem = self.head_sem(x)
         out_str = self.head_str(x)
@@ -70,36 +67,80 @@ def get_strict_image_order():
     return order
 
 def main():
+    # --- 1. INTERACTIVE MENU ---
+    print("\n--- MODEL SELECTION ---")
+    print("1: AlexNet")
+    print("2: ResNet50")
+    model_choice = input("Enter 1 or 2: ").strip()
+    MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50"
+
+    print(f"\nWhich task are we extracting for {MODEL_NAME.upper()}?")
+    print("1: All (Multi-Task)")
+    print("2: Appearance")
+    print("3: Semantic")
+    print("4: Structure")
+    task_choice = input("Enter 1, 2, 3, or 4: ").strip()
+
+    task_map = {'1': 'all', '2': 'appearance', '3': 'semantic', '4': 'structure'}
+    TARGET_TASK = task_map.get(task_choice, 'all')
+
+    # Dynamically build paths based on user input
+    MODEL_PATH = PROJECT_ROOT / f"outputs/finetuned_{TARGET_TASK}_{MODEL_NAME}.pth"
+    OUTPUT_DIR = PROJECT_ROOT / f"outputs/finetuned_{TARGET_TASK}/features/{MODEL_NAME}"
+
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     df = pd.read_csv(LABELS_CSV)
-    if MODEL_NAME == "alexnet":
-        model = MultiTaskAlexNet(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
-    elif MODEL_NAME == "resnet50":
-        model = MultiTaskResNet50(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
+    
+    # --- 2. ARCHITECTURE SWITCH ---
+    if TARGET_TASK == "all":
+        if MODEL_NAME == "alexnet":
+            model = MultiTaskAlexNet(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
+        elif MODEL_NAME == "resnet50":
+            model = MultiTaskResNet50(df.Appearance_Category.max(), df.Semantic_Category.max(), df.Structure_Category.max()).to(device)
+    else:
+        num_classes = df.Appearance_Category.max() if TARGET_TASK == "appearance" else (df.Semantic_Category.max() if TARGET_TASK == "semantic" else df.Structure_Category.max())
+        if MODEL_NAME == "alexnet":
+            model = models.alexnet(weights=None)
+            model.classifier[6] = nn.Linear(model.classifier[6].in_features, num_classes)
+        elif MODEL_NAME == "resnet50":
+            model = models.resnet50(weights=None)
+            model.fc = nn.Linear(model.fc.in_features, num_classes)
+        model = model.to(device)
+
+    # Load weights
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
 
+    # Define standard layers to extract
     if MODEL_NAME == "alexnet":
         layers_to_extract = {
             "features_2": model.features[2], "features_5": model.features[5],
             "features_7": model.features[7], "features_9": model.features[9],
-            "features_12": model.features[12], "shared_classifier_2": model.shared_classifier[2],
-            "shared_classifier_5": model.shared_classifier[5]
+            "features_12": model.features[12]
         }
-    elif MODEL_NAME == "resnet50":
-        layers_to_extract = {
-            "layer1": model.backbone[4],
-            "layer2": model.backbone[5],
-            "layer3": model.backbone[6],
-            "layer4": model.backbone[7]
-        }
+        # Add the specific classifier layers based on architecture
+        if TARGET_TASK == "all":
+            layers_to_extract.update({"shared_classifier_2": model.shared_classifier[2], "shared_classifier_5": model.shared_classifier[5]})
+        else:
+            layers_to_extract.update({"classifier_2": model.classifier[2], "classifier_5": model.classifier[5], "classifier_6": model.classifier[6]})
 
+    elif MODEL_NAME == "resnet50":
+        if TARGET_TASK == "all":
+            layers_to_extract = {"layer1": model.backbone[4], "layer2": model.backbone[5], "layer3": model.backbone[6], "layer4": model.backbone[7]}
+        else:
+            layers_to_extract = {"layer1": model.layer1, "layer2": model.layer2, "layer3": model.layer3, "layer4": model.layer4}
+
+    # Setup activations dictionary
     activations = {name: [] for name in layers_to_extract.keys()}
-    activations["head_app"] = []
-    activations["head_sem"] = []
-    activations["head_str"] = []
+    
+    # Track the final decision heads manually based on task
+    if TARGET_TASK == "all":
+        activations["head_app"] = []
+        activations["head_sem"] = []
+        activations["head_str"] = []
     
     def get_activation(name):
         def hook(model, input, output):
@@ -111,18 +152,23 @@ def main():
     transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
 
     target_filenames = get_strict_image_order()
-    print(f"Extracting 10 layers for {len(target_filenames)} images...")
+    print(f"\nExtracting layers from {MODEL_NAME.upper()} ({TARGET_TASK.upper()}) for {len(target_filenames)} images...")
 
     with open(OUTPUT_DIR / "file_names.txt", "w") as f:
         with torch.no_grad():
             for filename in target_filenames:
                 img = Image.open(TEST_IMG_DIR / filename).convert("RGB")
-                out_app, out_sem, out_str = model(transform(img).unsqueeze(0).to(device))
+                img_tensor = transform(img).unsqueeze(0).to(device)
                 
-                # Save the 3 parallel heads separately
-                activations["head_app"].append(out_app.detach().cpu().numpy().squeeze())
-                activations["head_sem"].append(out_sem.detach().cpu().numpy().squeeze())
-                activations["head_str"].append(out_str.detach().cpu().numpy().squeeze())
+                # --- 3. FORWARD PASS SWITCH ---
+                if TARGET_TASK == "all":
+                    out_app, out_sem, out_str = model(img_tensor)
+                    activations["head_app"].append(out_app.detach().cpu().numpy().squeeze())
+                    activations["head_sem"].append(out_sem.detach().cpu().numpy().squeeze())
+                    activations["head_str"].append(out_str.detach().cpu().numpy().squeeze())
+                else:
+                    _ = model(img_tensor)
+                    
                 f.write(f"{filename}\n")
 
     for handle in handles: handle.remove()

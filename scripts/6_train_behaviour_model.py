@@ -14,12 +14,7 @@ import shutil
 
 # --- Project Setup ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_NAME = "resnet50" # currently supports "alexnet" or "resnet50"
-TRAIN_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_anderson_full"
-TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
-LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
-OUTPUT_WEIGHTS = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
-OUTPUT_PLOT = PROJECT_ROOT / f"outputs/loss_curve_{MODEL_NAME}.png"
+
 
 # --- 1. Custom Dataset with Leakage Prevention ---
 class SYNSBehaviorDataset(Dataset):
@@ -129,6 +124,28 @@ class MultiTaskResNet50(nn.Module):
 
 # --- 3. Training Loop ---
 def main():
+    # --- 1. INTERACTIVE MENU: MODEL & TASK ---
+    print("\n--- MODEL SELECTION ---")
+    print("1: AlexNet")
+    print("2: ResNet50")
+    model_choice = input("Enter 1 or 2: ").strip()
+    MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50"
+
+    print(f"\nWhich task are we running for {MODEL_NAME.upper()}?")
+    print("1: All (Multi-Task)")
+    print("2: Appearance")
+    print("3: Semantic")
+    print("4: Structure")
+    task_choice = input("Enter 1, 2, 3, or 4: ").strip()
+    task_map = {'1': 'all', '2': 'appearance', '3': 'semantic', '4': 'structure'}
+    TARGET_TASK = task_map.get(task_choice, 'all')
+
+    TRAIN_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_anderson_full"
+    TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
+    LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
+    OUTPUT_WEIGHTS = PROJECT_ROOT / f"outputs/finetuned_{TARGET_TASK}_{MODEL_NAME}.pth"
+    OUTPUT_PLOT = PROJECT_ROOT / f"outputs/loss_curve_{TARGET_TASK}_{MODEL_NAME}.png"
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on: {device}")
 
@@ -155,7 +172,7 @@ def main():
     full_train_dataset = SYNSBehaviorDataset(TRAIN_IMG_DIR, TEST_IMG_DIR, LABELS_CSV, transform=train_transform)
     full_val_dataset = SYNSBehaviorDataset(TRAIN_IMG_DIR, TEST_IMG_DIR, LABELS_CSV, transform=val_transform)
     
-    # 3. Generate random indices for the 90/10 split
+    # 3. Generate random indices for the 80/20 split
     dataset_size = len(full_train_dataset)
     val_size = int(0.20 * dataset_size)
     train_size = dataset_size - val_size
@@ -174,23 +191,27 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
 
-    # Initialize model
-    if MODEL_NAME == "alexnet":
-        model = MultiTaskAlexNet(
-            full_train_dataset.num_app_classes, 
-            full_train_dataset.num_sem_classes, 
-            full_train_dataset.num_str_classes
-        ).to(device)
-    elif MODEL_NAME == "resnet50":
-        model = MultiTaskResNet50(
-            full_train_dataset.num_app_classes, 
-            full_train_dataset.num_sem_classes, 
-            full_train_dataset.num_str_classes
-        ).to(device)
+    # --- ARCHITECTURE INITIALIZATION SWITCH ---
+    if TARGET_TASK == "all":
+        if MODEL_NAME == "alexnet":
+            model = MultiTaskAlexNet(full_train_dataset.num_app_classes, full_train_dataset.num_sem_classes, full_train_dataset.num_str_classes).to(device)
+        elif MODEL_NAME == "resnet50":
+            model = MultiTaskResNet50(full_train_dataset.num_app_classes, full_train_dataset.num_sem_classes, full_train_dataset.num_str_classes).to(device)
+    else:
+        # Determine specific class count
+        num_classes = full_train_dataset.num_app_classes if TARGET_TASK == "appearance" else (full_train_dataset.num_sem_classes if TARGET_TASK == "semantic" else full_train_dataset.num_str_classes)
+        
+        if MODEL_NAME == "alexnet":
+            model = models.alexnet(weights=models.AlexNet_Weights.IMAGENET1K_V1)
+            model.classifier[6] = nn.Linear(model.classifier[6].in_features, num_classes)
+        elif MODEL_NAME == "resnet50":
+            model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+            model.fc = nn.Linear(model.fc.in_features, num_classes)
+        model = model.to(device)
 
-    # Loss functions and Optimizer (L2 Regularization / weight_decay removed)
+    # Loss functions and Optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     epochs = 10
 
     # Trackers
@@ -206,71 +227,86 @@ def main():
             model.train()
             running_train_loss = 0.0
             
-            train_correct_app, train_correct_sem, train_correct_str = 0, 0, 0
+            train_correct_app, train_correct_sem, train_correct_str, train_correct_single = 0, 0, 0, 0
             train_total = 0
 
             for images, labels_app, labels_sem, labels_str in train_loader:
-                images, labels_app, labels_sem, labels_str = images.to(device), labels_app.to(device), labels_sem.to(device), labels_str.to(device)
-
+                images = images.to(device)
                 optimizer.zero_grad()
-                preds_app, preds_sem, preds_str = model(images)
-                loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+
+                # --- LOSS CALCULATION SWITCH ---
+                if TARGET_TASK == "all":
+                    labels_app, labels_sem, labels_str = labels_app.to(device), labels_sem.to(device), labels_str.to(device)
+                    preds_app, preds_sem, preds_str = model(images)
+                    loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+                    
+                    train_correct_app += (torch.max(preds_app.data, 1)[1] == labels_app).sum().item()
+                    train_correct_sem += (torch.max(preds_sem.data, 1)[1] == labels_sem).sum().item()
+                    train_correct_str += (torch.max(preds_str.data, 1)[1] == labels_str).sum().item()
+                    train_total += labels_app.size(0)
+                else:
+                    labels = labels_app if TARGET_TASK == "appearance" else (labels_sem if TARGET_TASK == "semantic" else labels_str)
+                    labels = labels.to(device)
+                    preds = model(images)
+                    loss = criterion(preds, labels)
+                    
+                    train_correct_single += (torch.max(preds.data, 1)[1] == labels).sum().item()
+                    train_total += labels.size(0)
+
                 loss.backward()
                 optimizer.step()
                 running_train_loss += loss.item()
                 
-                _, predicted_app = torch.max(preds_app.data, 1)
-                _, predicted_sem = torch.max(preds_sem.data, 1)
-                _, predicted_str = torch.max(preds_str.data, 1)
-                
-                train_total += labels_app.size(0)
-                train_correct_app += (predicted_app == labels_app).sum().item()
-                train_correct_sem += (predicted_sem == labels_sem).sum().item()
-                train_correct_str += (predicted_str == labels_str).sum().item()
                 
             avg_train_loss = running_train_loss / len(train_loader)
             train_losses.append(avg_train_loss)
-            
-            acc_train_app = 100 * train_correct_app / train_total
-            acc_train_sem = 100 * train_correct_sem / train_total
-            acc_train_str = 100 * train_correct_str / train_total
 
             # --- VALIDATION PHASE ---
             model.eval()
             running_val_loss = 0.0
             
-            val_correct_app, val_correct_sem, val_correct_str = 0, 0, 0
+            val_correct_app, val_correct_sem, val_correct_str, val_correct_single = 0, 0, 0, 0
             val_total = 0
 
             with torch.no_grad(): 
                 for images, labels_app, labels_sem, labels_str in val_loader:
-                    images, labels_app, labels_sem, labels_str = images.to(device), labels_app.to(device), labels_sem.to(device), labels_str.to(device)
+                    images = images.to(device)
                     
-                    preds_app, preds_sem, preds_str = model(images)
-                    loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+                    if TARGET_TASK == "all":
+                        labels_app, labels_sem, labels_str = labels_app.to(device), labels_sem.to(device), labels_str.to(device)
+                        preds_app, preds_sem, preds_str = model(images)
+                        loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+                        
+                        val_correct_app += (torch.max(preds_app.data, 1)[1] == labels_app).sum().item()
+                        val_correct_sem += (torch.max(preds_sem.data, 1)[1] == labels_sem).sum().item()
+                        val_correct_str += (torch.max(preds_str.data, 1)[1] == labels_str).sum().item()
+                        val_total += labels_app.size(0)
+                    else:
+                        labels = labels_app if TARGET_TASK == "appearance" else (labels_sem if TARGET_TASK == "semantic" else labels_str)
+                        labels = labels.to(device)
+                        preds = model(images)
+                        loss = criterion(preds, labels)
+                        
+                        val_correct_single += (torch.max(preds.data, 1)[1] == labels).sum().item()
+                        val_total += labels.size(0)
+
                     running_val_loss += loss.item()
-                    
-                    _, predicted_app = torch.max(preds_app.data, 1)
-                    _, predicted_sem = torch.max(preds_sem.data, 1)
-                    _, predicted_str = torch.max(preds_str.data, 1)
-                    
-                    val_total += labels_app.size(0)
-                    val_correct_app += (predicted_app == labels_app).sum().item()
-                    val_correct_sem += (predicted_sem == labels_sem).sum().item()
-                    val_correct_str += (predicted_str == labels_str).sum().item()
                     
             avg_val_loss = running_val_loss / len(val_loader)
             val_losses.append(avg_val_loss)
             
-            acc_val_app = 100 * val_correct_app / val_total
-            acc_val_sem = 100 * val_correct_sem / val_total
-            acc_val_str = 100 * val_correct_str / val_total
-
+            # --- PRINTING SWITCH ---
             print(f"\nEpoch [{epoch+1}/{epochs}] Summary:")
-            print(f"  Loss | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f}")
-            print(f"  App. Acc | Train: {acc_train_app:.2f}% | Val: {acc_val_app:.2f}%")
-            print(f"  Sem. Acc | Train: {acc_train_sem:.2f}% | Val: {acc_val_sem:.2f}%")
-            print(f"  Str. Acc | Train: {acc_train_str:.2f}% | Val: {acc_val_str:.2f}%")
+            if TARGET_TASK == "all":
+                print(f"  Loss | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f}")
+                print(f"  App. Acc | Train: {100*train_correct_app/train_total:.2f}% | Val: {100*val_correct_app/val_total:.2f}%")
+                print(f"  Sem. Acc | Train: {100*train_correct_sem/train_total:.2f}% | Val: {100*val_correct_sem/val_total:.2f}%")
+                print(f"  Str. Acc | Train: {100*train_correct_str/train_total:.2f}% | Val: {100*val_correct_str/val_total:.2f}%")
+            else:
+                acc_train = 100 * train_correct_single / train_total
+                acc_val = 100 * val_correct_single / val_total
+                print(f"  Loss | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f}")
+                print(f"  {TARGET_TASK.capitalize()} Acc | Train: {acc_train:.2f}% | Val: {acc_val:.2f}%")
 
             # --- CHECKPOINTING ---
             if avg_val_loss < best_val_loss:
@@ -282,7 +318,7 @@ def main():
 
                 # Move the file to the final location
                 shutil.move(tmp_path, OUTPUT_WEIGHTS)
-                print(f"  -> Best model saved! (Val Loss: {best_val_loss:.4f})")
+                print(f"  -> Best {TARGET_TASK.upper()} model saved! (Val Loss: {best_val_loss:.4f})")
 
     except KeyboardInterrupt:
         print("\nTraining interrupted by user! The best model found so far has been safely kept.")
@@ -291,9 +327,11 @@ def main():
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, len(train_losses)+1), train_losses, label='Training Loss', marker='o')
     plt.plot(range(1, len(val_losses)+1), val_losses, label='Validation Loss', marker='o')
-    plt.title(f'Training vs Validation Loss ({MODEL_NAME.upper()})')
+
+    title_prefix = "Multi-Task" if TARGET_TASK == "all" else TARGET_TASK.capitalize()
+    plt.title(f'{title_prefix} Training vs Validation Loss ({MODEL_NAME.upper()})')
     plt.xlabel('Epochs')
-    plt.ylabel('Total Multi-Task Cross Entropy Loss')
+    plt.ylabel('Cross Entropy Loss')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(OUTPUT_PLOT)
