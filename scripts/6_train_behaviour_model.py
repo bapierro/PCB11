@@ -16,6 +16,24 @@ import shutil
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
+def resolve_existing_dir(*candidates):
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "None of the expected folders exist: "
+        + ", ".join(str(candidate) for candidate in candidates)
+    )
+
+
+def get_best_device():
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 # --- 1. Custom Dataset with Leakage Prevention ---
 class SYNSBehaviorDataset(Dataset):
     def __init__(self, img_dir, test_dir, labels_csv, transform=None):
@@ -140,13 +158,16 @@ def main():
     task_map = {'1': 'all', '2': 'appearance', '3': 'semantic', '4': 'structure'}
     TARGET_TASK = task_map.get(task_choice, 'all')
 
-    TRAIN_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_anderson_full"
+    TRAIN_IMG_DIR = resolve_existing_dir(
+        PROJECT_ROOT / "data/scenes/syns_anderson_full",
+        PROJECT_ROOT / "data/extracted_anderson_pictures 2",
+    )
     TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
     LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
     OUTPUT_WEIGHTS = PROJECT_ROOT / f"outputs/finetuned_{TARGET_TASK}_{MODEL_NAME}.pth"
     OUTPUT_PLOT = PROJECT_ROOT / f"outputs/loss_curve_{TARGET_TASK}_{MODEL_NAME}.png"
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_best_device()
     print(f"Training on: {device}")
 
     # Ensure output directory exists

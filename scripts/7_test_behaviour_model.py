@@ -14,6 +14,14 @@ MODEL_PATH = PROJECT_ROOT / f"outputs/finetuned_behaviour_{MODEL_NAME}.pth"
 TEST_IMG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 LABELS_CSV = PROJECT_ROOT / "data/behaviour/consensus_labels.csv"
 
+
+def get_best_device():
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
 # --- 1a. Model Architecture for AlexNet (Matches training exactly) ---
 class MultiTaskAlexNet(nn.Module):
     def __init__(self, num_app, num_sem, num_str):
@@ -58,7 +66,7 @@ class MultiTaskResNet50(nn.Module):
         return out_app, out_sem, out_str
 
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_best_device()
     
     # 1. Load Ground Truth Data
     df = pd.read_csv(LABELS_CSV)

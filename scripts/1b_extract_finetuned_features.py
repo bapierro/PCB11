@@ -66,6 +66,14 @@ def get_strict_image_order():
             
     return order
 
+
+def get_best_device():
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
 def main():
     # --- 1. INTERACTIVE MENU ---
     print("\n--- MODEL SELECTION ---")
@@ -89,7 +97,7 @@ def main():
     OUTPUT_DIR = PROJECT_ROOT / f"outputs/finetuned_{TARGET_TASK}/features/{MODEL_NAME}"
 
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_best_device()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     df = pd.read_csv(LABELS_CSV)

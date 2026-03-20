@@ -13,11 +13,12 @@ torch = "2.0.1"
 torchvision = "0.15.2"
 thingsvision = "^2.7.3"
 numpy = "1.26.4"
+pandas = "2.3.3"
 pillow = "^12.1.0"
 matplotlib = "^3.10.8"
 scipy = "^1.15.0"
 tensorflow-macos = {version = "2.15.0", markers = "platform_system == \"Darwin\""}
-tensorflow-io-gcs-filesystem = "0.31.0"
+tensorflow-io-gcs-filesystem = "0.37.1"
 
 [tool.poetry.scripts]
 pcb11-features = "pcb11.features_cli:main"

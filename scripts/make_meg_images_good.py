@@ -6,19 +6,32 @@ from pathlib import Path
 # --- Setup Paths ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BAD_MEG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36"
-GOOD_SOURCE_DIR = PROJECT_ROOT / "data/scenes/syns_anderson_full"
 NEW_MEG_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
+
+
+def resolve_existing_dir(*candidates):
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "None of the expected source folders exist: "
+        + ", ".join(str(candidate) for candidate in candidates)
+    )
 
 def main():
     print("=== Rebuilding MEG Image Set ===")
+    good_source_dir = resolve_existing_dir(
+        PROJECT_ROOT / "data/scenes/syns_anderson_full",
+        PROJECT_ROOT / "data/extracted_anderson_pictures 2",
+    )
     
     # 1. Ensure the new destination directory exists (and is completely flat)
     NEW_MEG_DIR.mkdir(parents=True, exist_ok=True)
     
     # 2. Map all high-quality images by their integer IDs (Scene, View)
-    print(f"Scanning {GOOD_SOURCE_DIR.name} for high-quality source images...")
+    print(f"Scanning {good_source_dir.name} for high-quality source images...")
     good_images = {}
-    for p in GOOD_SOURCE_DIR.glob("*.jpg"):
+    for p in good_source_dir.glob("*.jpg"):
         match = re.search(r'S(\d+)_Im(\d+)', p.name)
         if match:
             scene_int, view_int = int(match.group(1)), int(match.group(2))
