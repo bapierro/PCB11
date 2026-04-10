@@ -17,7 +17,14 @@ This project is about studying whether behaviour-trained ANNs learn feature repr
 
 3. Run the script make_meg_images_good.py to get brighter test image set. These are stored into data/scenes/syns_meg36_real.
 
-4. Run the scripts in the order they have been numbered. The results are stored in the outputs-folder. Before running the scripts, make sure you have picked a correct model at the beginning of the script. The code currently supports the models "alexnet" and "resnet50". The scripts for computing the RDMs, RSA and plotting support an interactive choice of either a pre-trained or a fine-tuned model.
+4. Run the scripts in the order they have been numbered. The results are stored in the outputs-folder. Before running the scripts, make sure you have picked a correct model at the beginning of the script. The code currently supports the models "alexnet", "resnet50" and "cornet_s". The scripts for computing the RDMs, RSA and plotting support an interactive choice of either a pre-trained or a fine-tuned model.
+
+If you want to run cornet_s, install it to your environment as follows:
+git clone https://github.com/dicarlolab/CORnet
+cd CORnet
+pip install -e .
+
+After that, the scripts can be run normally for cornet_s as well as for alexnet and resnet50.
 
 ## Overview of the scripts:
 
