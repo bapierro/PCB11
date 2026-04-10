@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 import sys
 from pathlib import Path
+from fsspec import config
 import torch
 
 # Set up the project root and add 'src' to the system path to import custom modules
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
-from pcb11.features import FeatureConfig, extract_features
+from pcb11.features import FeatureConfig, extract_features, extract_cornet_features
 
 # --- 1. PICK YOUR MODEL HERE ---
-MODEL_NAME = "alexnet"  # Change to "alexnet" when you want to run the other model
+MODEL_NAME = "cornet_s"  # Change to "alexnet" when you want to run the other model
 
 # 2. The script automatically looks up the correct layers
 MODELS = {
     "alexnet": ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"],
-    "resnet50": ["layer1", "layer2", "layer3", "layer4"]
+    "resnet50": ["layer1", "layer2", "layer3", "layer4"],
+    "cornet_s": ["V1", "V2", "V4", "IT"]
 }
 
 # Select layers based on the chosen model
@@ -45,7 +47,10 @@ def main():
     )
     
     # Run the feature extraction pipeline
-    extract_features(config)
+    if config.model_name == "cornet_s":
+        extract_cornet_features(config)
+    else:
+        extract_features(config)
 
 if __name__ == "__main__":
     main()

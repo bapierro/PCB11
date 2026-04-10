@@ -13,8 +13,9 @@ from thingsvision.core.rsa import compute_rdm
 print("\n--- MODEL SELECTION ---")
 print("1: AlexNet")
 print("2: ResNet50")
-model_choice = input("Enter 1 or 2: ").strip()
-MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50"
+print("3: CORnet-S")
+model_choice = input("Enter 1, 2, or 3: ").strip()
+MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50" if model_choice == '2' else "cornet_s"
 
 # --- 2. INTERACTIVE PIPELINE SELECTOR ---
 print("\nWhich pipeline are we running?")
@@ -53,6 +54,8 @@ else:
         LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
     elif MODEL_NAME == "resnet50":
         LAYERS = ["layer1", "layer2", "layer3", "layer4"]
+    elif MODEL_NAME == "cornet_s":
+        LAYERS = ["V1", "V2", "V4", "IT"]
 
 # Define paths: location of extracted features and where to save RDMs (Dynamic based on menu)
 FEATURES_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/features" / MODEL_NAME
@@ -77,11 +80,9 @@ def main():
     
     # Get the target order from the CSV file
     target_order = get_strict_image_order()
-    
     # Read the order of images as they were processed/extracted
     with open(FEATURES_DIR / "file_names.txt", "r") as f:
         extracted_order = [Path(line.strip()).name for line in f if line.strip()]
-    
     # Compute indices to reorder extracted features to match the target order
     reorder_idx = [extracted_order.index(name) for name in target_order]
 

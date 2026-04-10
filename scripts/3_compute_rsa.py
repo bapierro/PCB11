@@ -12,8 +12,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 print("\n--- MODEL SELECTION ---")
 print("1: AlexNet")
 print("2: ResNet50")
-model_choice = input("Enter 1 or 2: ").strip()
-MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50"
+print("3: CORnet-S")
+model_choice = input("Enter 1, 2, or 3: ").strip()
+MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50" if model_choice == '2' else "cornet_s"
 
 # --- 2. INTERACTIVE PIPELINE SELECTOR ---
 print("\nWhich pipeline are we running RSA for?")
@@ -50,6 +51,8 @@ else:
         LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
     elif MODEL_NAME == "resnet50":
         LAYERS = ["layer1", "layer2", "layer3", "layer4"]
+    elif MODEL_NAME == "cornet_s":
+        LAYERS = ["V1", "V2", "V4", "IT"]
         
 # Define paths: location of computed RDMs, output for RSA results, MEG data source and 
 # three behavioral model RDMs

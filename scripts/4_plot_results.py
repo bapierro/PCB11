@@ -11,8 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 print("\n--- MODEL SELECTION ---")
 print("1: AlexNet")
 print("2: ResNet50")
-model_choice = input("Enter 1 or 2: ").strip()
-MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50"
+print("3: CORnet-S")
+model_choice = input("Enter 1, 2, or 3: ").strip()
+MODEL_NAME = "alexnet" if model_choice == '1' else "resnet50" if model_choice == '2' else "cornet_s"
 
 # --- 2. INTERACTIVE PIPELINE SELECTOR ---
 print("\nWhich pipeline are we running RSA for?")
@@ -49,6 +50,8 @@ else:
         LAYERS = ["features.2", "features.5", "features.7", "features.9", "features.12", "classifier.2", "classifier.5", "classifier.6"]
     elif MODEL_NAME == "resnet50":
         LAYERS = ["layer1", "layer2", "layer3", "layer4"]
+    elif MODEL_NAME == "cornet_s":
+        LAYERS = ["V1", "V2", "V4", "IT"]
 
 # Dynamic Paths
 RSA_DIR = PROJECT_ROOT / f"outputs/{PIPELINE}/rsa" / MODEL_NAME
@@ -66,7 +69,7 @@ def main():
     
     # Set up a two-panel figure
     fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
-    colors = plt.cm.viridis(np.linspace(0, 1, len(LAYERS)))
+    colors = plt.cm.plasma(np.linspace(0, 1, len(LAYERS)))
     
     # Set up a figure for behavioral model comparisons
     fig2, axes2 = plt.subplots()
@@ -113,17 +116,20 @@ def main():
                 peak_idx = start_idx + np.argmax(window_segment)
                 bootstrapped_peaks.append(time_points[peak_idx])
             
-            # The final peak is the mean of all bootstrap peaks, and error is the standard dev
-            layer_peak_mean = np.mean(bootstrapped_peaks)
+            # Error is the standard deviation of the bootstrapped peaks
             layer_peak_err = np.std(bootstrapped_peaks)
             
-            final_peaks.append(layer_peak_mean)
             final_errors.append(layer_peak_err)
             # -----------------------------------
 
             # Plot top panel (using standard mean data)
             smoothed_mean = smooth_data(mean_data)
             ax1.plot(time_points, smoothed_mean, label=f"{layer}", color=colors[i], linewidth=2)
+
+            # calculate the signal peaks and their latencies from subject-averaged data
+            window_segment = smoothed_mean[start_idx:end_idx]
+            peak_idx = start_idx + np.argmax(window_segment)
+            final_peaks.append(time_points[peak_idx])
         else:
             print(f"Missing files for: {layer}. Make sure you ran the subject-level RSA script!")
             final_peaks.append(np.nan)
