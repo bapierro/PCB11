@@ -259,7 +259,11 @@ def main():
                 if TARGET_TASK == "all":
                     labels_app, labels_sem, labels_str = labels_app.to(device), labels_sem.to(device), labels_str.to(device)
                     preds_app, preds_sem, preds_str = model(images)
-                    loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+                    loss = (
+                        criterion(preds_app.cpu(), labels_app.cpu())
+                        + criterion(preds_sem.cpu(), labels_sem.cpu())
+                        + criterion(preds_str.cpu(), labels_str.cpu())
+                    )
                     
                     train_correct_app += (torch.max(preds_app.data, 1)[1] == labels_app).sum().item()
                     train_correct_sem += (torch.max(preds_sem.data, 1)[1] == labels_sem).sum().item()
@@ -269,7 +273,7 @@ def main():
                     labels = labels_app if TARGET_TASK == "appearance" else (labels_sem if TARGET_TASK == "semantic" else labels_str)
                     labels = labels.to(device)
                     preds = model(images)
-                    loss = criterion(preds, labels)
+                    loss = criterion(preds.cpu(), labels.cpu())
                     
                     train_correct_single += (torch.max(preds.data, 1)[1] == labels).sum().item()
                     train_total += labels.size(0)
@@ -296,7 +300,11 @@ def main():
                     if TARGET_TASK == "all":
                         labels_app, labels_sem, labels_str = labels_app.to(device), labels_sem.to(device), labels_str.to(device)
                         preds_app, preds_sem, preds_str = model(images)
-                        loss = criterion(preds_app, labels_app) + criterion(preds_sem, labels_sem) + criterion(preds_str, labels_str)
+                        loss = (
+                            criterion(preds_app.cpu(), labels_app.cpu())
+                            + criterion(preds_sem.cpu(), labels_sem.cpu())
+                            + criterion(preds_str.cpu(), labels_str.cpu())
+                        )
                         
                         val_correct_app += (torch.max(preds_app.data, 1)[1] == labels_app).sum().item()
                         val_correct_sem += (torch.max(preds_sem.data, 1)[1] == labels_sem).sum().item()
@@ -306,7 +314,7 @@ def main():
                         labels = labels_app if TARGET_TASK == "appearance" else (labels_sem if TARGET_TASK == "semantic" else labels_str)
                         labels = labels.to(device)
                         preds = model(images)
-                        loss = criterion(preds, labels)
+                        loss = criterion(preds.cpu(), labels.cpu())
                         
                         val_correct_single += (torch.max(preds.data, 1)[1] == labels).sum().item()
                         val_total += labels.size(0)

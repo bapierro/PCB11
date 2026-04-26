@@ -23,7 +23,7 @@ MODELS = {
 LAYERS = MODELS[MODEL_NAME]
 
 # Define paths for input images and where to save the extracted features
-IMAGES_DIR = PROJECT_ROOT / "data/scenes/syns_meg36"
+IMAGES_DIR = PROJECT_ROOT / "data/scenes/syns_meg36_real"
 OUTPUT_DIR = PROJECT_ROOT / "outputs/clean_baseline/features" / MODEL_NAME
 
 def main():

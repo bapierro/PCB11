@@ -1,6 +1,7 @@
 # Python artifacts
 __pycache__/
 *.pyc
+.DS_Store
 
 # Virtual environments
 .venv/

@@ -162,7 +162,15 @@ def main():
 
     # compute RSA for the three behavioral models as well
     print("\nComputing RSA for behavioral models...")
-    for model_name, model_file in [("semantic", SEMANTIC_FILE), ("structure", STRUCTURE_FILE), ("visual", VISUAL_FILE)]:
+    behavioral_models = [
+        ("semantic", SEMANTIC_FILE),
+        ("structure", STRUCTURE_FILE),
+        ("visual", VISUAL_FILE),
+    ]
+    for model_name, model_file in behavioral_models:
+        if not model_file.exists():
+            print(f" - Skipping {model_name} model: missing {model_file.name}")
+            continue
         model_mat = loadmat(model_file, squeeze_me=True, struct_as_record=False)
         rdm_struct = model_mat['RDM']
         model_rdm = np.asarray(rdm_struct.RDM, dtype=np.float64)

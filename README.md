@@ -38,6 +38,8 @@ After that, the scripts can be run normally for cornet_s as well as for alexnet 
 
 - plot_results: Plots the RSA results between the prespecified model and MEG RDMs (time series of Spearman correlations for each layer separately as well as the peak latencies for each layer). Additionally, plots the RSA results between the prespecified model and behavioral RDMs.
 
+- plot_rsa_finetune_difference: Compares fine-tuned RSA values against the pre-trained baseline layer by layer. The script plots the full RSA difference time courses (`fine-tuned - baseline`) and a peak-height difference bar plot, then writes a CSV summary of which comparable layers peak higher after fine-tuning.
+
 - extract_behavioral_labels: reads the behavioral labels for each scene, computes the consensus labels and stores them into consensus_labels.csv.
 
 - train_behaviour_model: constructs training and validation data sets from scene images and the corresponding behavioral labels, and fine-tunes the pre-trained model with the data. Currently only supports Alexnet.
